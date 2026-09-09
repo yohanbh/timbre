@@ -62,11 +62,26 @@ aggregation rule against the unfiltered list would mostly measure self-recall.
 - Reads go through `load_layout`, never a bare arange: the store is allocated at
   21 windows/track but most fill 20, so the raw array has zero-filled holes.
 - Vectors are L2-normalized at ingest, so cosine is a plain dot product.
-- **Chunk width changes the last bits.** The same dot products at chunk=1500 vs
-  20000 differ on ~1.3% of elements by up to 7.7e-07, in the raw BLAS output —
-  the same tile-decomposition effect `embed.py` documents for batch composition.
-  Neighbour *ids* are bit-stable and are what `recall_at_k` consumes; *sims* are
-  only float32-stable. Do not assert bit-identical sims across chunk widths.
+- **Float32 reduction order is load-bearing here, in two ways.**
+  *Chunk width:* the same dot products at chunk=1500 vs 20000 differ on ~1.3% of
+  elements by up to 7.7e-07 in the raw BLAS output — the tile-decomposition
+  effect `embed.py` documents for batch composition. Ids survive this; sims do
+  not, so ids are the asserted contract across chunk widths.
+  *BLAS thread count:* worse. Rebuilding at 1, 2 or 8 threads changes the cached
+  **neighbour ids**, not just the sims, because this corpus packs neighbours at
+  0.979 similarity and near-ties reorder when the last bits move.
+
+  | BLAS threads | ids identical to cache | sims differing |
+  |---|---|---|
+  | 1 | no | 6042 |
+  | 2 | no | 5525 |
+  | **4 (pinned)** | **yes** | **0** |
+  | 8 | no | 5386 |
+
+  `build_groundtruth` therefore pins the count to 4 before numpy is imported,
+  the same discipline `__main__.py` applies for ingest, and records
+  `blas_threads` in the npz. Ground truth that depends on an ambient env var is
+  not ground truth.
 
 ## Phase 2 — HNSW from scratch (1-1½ weekends)
 

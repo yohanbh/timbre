@@ -129,19 +129,32 @@ def test_query_rows_are_populated(layout):
 
 # --- 3. cache round-trip ------------------------------------------------------
 
+def _rebuild(out, env_extra=None):
+    """Rebuild the cache in a subprocess with a scrubbed environment.
+
+    BLAS thread vars are stripped rather than inherited: build_groundtruth pins
+    them itself, and letting the caller's shell leak in would make this test
+    pass or fail depending on how pytest was invoked.
+    """
+    import os
+    env = {k: v for k, v in os.environ.items()
+           if not k.endswith(("_NUM_THREADS",))}
+    env["PYTHONPATH"] = "src"
+    env.update(env_extra or {})
+    return subprocess.run(
+        [sys.executable, "-m", "timbre.build_groundtruth", DB, STORE, str(out)],
+        capture_output=True, text=True, env=env,
+    )
+
+
 def test_cache_reloads_identically(tmp_path):
     """Rebuild into a temp file and confirm it matches the committed cache."""
-    pytest.importorskip("numpy")
     import os
     if not os.path.exists(CACHE):
         pytest.skip("ground truth not built yet")
 
     out = tmp_path / "gt.npz"
-    r = subprocess.run(
-        [sys.executable, "-m", "timbre.build_groundtruth", DB, STORE, str(out)],
-        capture_output=True, text=True,
-        env={**os.environ, "PYTHONPATH": "src", "OMP_NUM_THREADS": "4"},
-    )
+    r = _rebuild(out)
     assert r.returncode == 0, r.stderr
 
     a, b = np.load(CACHE), np.load(out)
@@ -149,6 +162,30 @@ def test_cache_reloads_identically(tmp_path):
         assert np.array_equal(a[key], b[key]), f"{key} not reproducible"
     for key in ("gt_sims", "gt_sims_nosib"):
         np.testing.assert_allclose(a[key], b[key], rtol=0, atol=0)
+
+
+def test_build_pins_threads_against_ambient_env(tmp_path):
+    """A hostile ambient OMP_NUM_THREADS must not change the cached result.
+
+    Measured: at 1, 2 and 8 BLAS threads the top-100 differs from the 4-thread
+    build in *ids*, not merely sims -- neighbours sit at 0.979 similarity, so a
+    changed reduction order reorders near-ties. build_groundtruth therefore pins
+    the count before numpy is imported; this test is what keeps that honest.
+    """
+    import os
+    if not os.path.exists(CACHE):
+        pytest.skip("ground truth not built yet")
+
+    out = tmp_path / "gt_hostile.npz"
+    r = _rebuild(out, {"OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1",
+                       "MKL_NUM_THREADS": "1"})
+    assert r.returncode == 0, r.stderr
+
+    a, b = np.load(CACHE), np.load(out)
+    assert int(b["blas_threads"]) == 4, "build did not pin its thread count"
+    assert np.array_equal(a["gt_ids"], b["gt_ids"]), \
+        "ambient thread env leaked into the cached ground truth"
+    np.testing.assert_allclose(a["gt_sims"], b["gt_sims"], rtol=0, atol=0)
 
 
 # --- 4. recall_at_k -----------------------------------------------------------
