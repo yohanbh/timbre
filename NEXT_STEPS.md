@@ -29,38 +29,44 @@ costs ~6x throughput (see README).
 | Strict 480,000-sample windows; accept 20 windows | 59% of clips are 29.9766 s (encoder artifact). Padding would add a near-duplicate of window 20 plus silence. |
 | No `segments` table | Derivable (`offset_s = row_id - row_start`), and a second table consistent with the mmap would break the atomic commit. |
 | 6 workers | GPU saturates at 91-97%; more only adds memory pressure on a 7.4 GiB box. |
+| Cache **both** unfiltered and sibling-excluded ground truth | Measured: 73.5% of top-10 are same-track siblings. One list cannot serve both index recall and retrieval quality. |
 
-## Phase 1 — exact search + evaluation harness (½ weekend)
+## Phase 1 — exact search + evaluation harness — DONE
 
-Build this **before** the HNSW index. Without ground truth there is no way to tell
-a working index from a broken one, and the spec's own risk note says a naive
-neighbour-selection heuristic produces a graph that looks fine and searches badly.
+Built and committed. `store/groundtruth.npz` caches exact top-100 for a fixed
+1,000-query genre-stratified sample; any candidate index scores against it with
+one call to `recall_at_k`.
 
-```
-1. Chunked brute-force cosine over 510,064 vectors
-   -> verify: matches a naive loop on 100 sampled queries
-2. Fixed 1,000-query held-out sample, genre-stratified
-   -> verify: excluded from the index build; selection is reproducible from a seed
-3. Cache exact top-100 neighbours per query
-   -> verify: reload gives identical neighbour ids
-4. recall_at_k(candidate_results, ground_truth, k)
-   -> verify: returns 1.0 when scored against ground truth itself
+```bash
+PYTHONPATH=src python3 -m timbre.build_groundtruth   # ~20 s, rebuilds the cache
+PYTHONPATH=src python3 -m pytest tests/test_groundtruth.py -q
 ```
 
-**Done when:** exact top-100 is cached for the query sample, and any candidate
-index can be scored against it with one function call.
+**Two ground-truth variants are cached, not one.** Measured on this corpus,
+73.5% of unfiltered top-10 neighbours are windows of the query's own track and
+40.2% of queries have an all-sibling top-10 (within-track similarity 0.979).
 
-### Three choices to make, with the evidence behind them
+| Array | Use |
+|---|---|
+| `gt_ids` / `gt_sims` | True nearest neighbours. The honest target for **Phase 2 index recall** — an exact index must reproduce exactly this. |
+| `gt_ids_nosib` / `gt_sims_nosib` | Same-track windows removed. The target for **retrieval quality** and the aggregation experiment, where "found the same song again" is not the question. |
 
-- **Segment-level ground truth, not track-level.** Within-track windows are 0.979
-  similar, so track-level mean-pooling discards most of what the 21x storage paid
-  for. Building ground truth on pooled vectors would bake that loss into every
-  Phase 2 measurement. Track scores derive from segment scores; not the reverse.
-- **Genre-stratified query sampling.** The corpus is 28% Rock / 25% Electronic, so
-  uniform sampling yields a query set that is mostly those two. Open question #1
-  is partly about whether density varies by genre, which needs coverage.
-- **Chunk the matmul from the start.** 510K x 512 is ~1 GB per full pass; fine for
-  1,000 queries, but chunking is barely more code and avoids a rewrite later.
+The two overlap only 0.265 at k=10, so the choice is not cosmetic: scoring the
+aggregation rule against the unfiltered list would mostly measure self-recall.
+
+### What Phase 1 established
+
+- Query sample is reproducible from `SEED` alone; all 16 genres present, one
+  window per track (siblings are near-duplicate queries and buy less than a
+  different track for the same cost).
+- Reads go through `load_layout`, never a bare arange: the store is allocated at
+  21 windows/track but most fill 20, so the raw array has zero-filled holes.
+- Vectors are L2-normalized at ingest, so cosine is a plain dot product.
+- **Chunk width changes the last bits.** The same dot products at chunk=1500 vs
+  20000 differ on ~1.3% of elements by up to 7.7e-07, in the raw BLAS output —
+  the same tile-decomposition effect `embed.py` documents for batch composition.
+  Neighbour *ids* are bit-stable and are what `recall_at_k` consumes; *sims* are
+  only float32-stable. Do not assert bit-identical sims across chunk widths.
 
 ## Phase 2 — HNSW from scratch (1-1½ weekends)
 
