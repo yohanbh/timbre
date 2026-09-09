@@ -29,7 +29,23 @@ bash tests/kill_restart.sh <audio_root> <db> <store> 5  # the acceptance gate
 With 12 workers the CPU pool supplies 10.8 tracks/s against 6.3 tracks/s of GPU
 capacity, so the pipeline is GPU-bound by design — the irreducible cost. Without
 the pool a single CPU feeds only 0.9 tracks/s and the GPU idles ~85%. Peak VRAM
-1475 MiB. Projected full-corpus run: **~1.1 h for 25,000 tracks**.
+1475 MiB, peak RSS 2.1 GiB. Projected full-corpus run: **~1.1 h for 25,000 tracks**.
+
+These figures come from synthetic constant-bitrate audio. Real FMA mp3s are VBR
+and decode more slowly, so treat 1.1 h as a floor rather than a prediction.
+
+### Backpressure
+
+`ProcessPoolExecutor.map` submits every task at once, so workers race ahead of the
+GPU consumer and completed mel tensors accumulate without bound — 5.1 MiB each,
+~125 GiB across 25k tracks on a 7.4 GiB machine. The loop instead keeps at most
+`QUEUE_DEPTH` futures alive, topping up as results are consumed, which caps
+in-flight mel at ~123 MiB for any corpus size.
+
+That change also happens to prove the order-independence claim: `wait(FIRST_COMPLETED)`
+yields results in completion order where `map` yielded submission order, and the
+store hash is unchanged across both. Row assignment genuinely does not depend on
+processing order.
 
 ### What "byte-identical restart" actually requires
 
