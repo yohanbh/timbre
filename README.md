@@ -142,3 +142,73 @@ across two SIGKILLs, converging to byte-identical store and bookkeeping hashes
   row_start`), and a second table that must stay consistent with the mmap would
   break the atomic commit above. Materialize later if Phase 1/2 profiling shows
   the range scan hurts.
+
+## Embedding space: measured properties
+
+Measured on the finished store (510,064 vectors). These are findings, not bugs,
+and they bear directly on spec open questions #1 and #2.
+
+### The space is strongly anisotropic
+
+| Property | Value |
+|---|---|
+| Mean pairwise cosine (audio-audio) | **0.871** |
+| Std of pairwise cosine | 0.177 |
+| Norm of the mean vector | 0.923 (0 would be isotropic) |
+| Top-1 principal component variance share | 45% |
+| Participation ratio | **4.3 effective dims of 512** |
+
+Every vector points in nearly the same direction. This is CLAP's, not ours: a
+fresh embed reproduces stored bytes exactly, and independently embedded tracks
+show the same ~0.88 geometry.
+
+### Mean-centering does not help (tested, rejected)
+
+Centering collapses mean pairwise cosine from 0.87 to 0.045, which looks like a
+dramatic fix, but retrieval quality is unchanged:
+
+| | genre@10 | mean cos | std |
+|---|---|---|---|
+| chance | 17.2% | | |
+| raw | **31.5%** | 0.864 | 0.177 |
+| centered | 32.6% | 0.045 | 0.441 |
+
++1.1% at n=2000 is noise. Subtracting a constant shifts all points equally and
+largely preserves *ranking*, and retrieval only cares about ranking. Anisotropy
+makes absolute scores look alike without destroying their order. **We index the
+raw space** -- simpler, and no preprocessing step for a query path to replicate.
+
+Chance is 17.2%, not 1/16: the corpus is skewed (28% Rock, 25% Electronic), so
+that is the sum of squared genre shares. Reproduce with
+`PYTHONPATH=src python3 tests/centering_test.py 2000`.
+
+### Discrimination is real but weak
+
+31.5% genre@10 against 17.2% chance is ~1.8x. Listening confirms it: neighbours
+often share production era while differing in genre and instrumentation.
+
+Three hypotheses for the weakness were tested and **ruled out**, so they need not
+be re-investigated:
+
+| Hypothesis | Measurement | Verdict |
+|---|---|---|
+| Hubness (universal neighbours) | top track appears 7x vs 0.4 expected; 71% of tracks appear 0 times | mild, not causal |
+| Mean-pooling washes out detail | within-track window similarity **0.979** | ruled out: pooling loses ~nothing |
+| Keying on encoding/production | genre agreement 37% > bitrate agreement 30.5% | ruled out: signal is musical |
+
+The conclusion is simply that CLAP discriminates weakly on this corpus.
+
+### Consequences for later phases
+
+- **Open question #1 now has a mechanism.** Standard HNSW benchmarks (SIFT, GIST)
+  use far more isotropic data. A graph where nearly all distances sit near 0.87
+  has much less structure to exploit, so published recall-vs-`efSearch` curves
+  plausibly will not transfer. That is a defensible measured result.
+- **Open question #2 matters more than it looks.** Within-track windows at 0.979
+  mean a track's 20 windows are nearly one vector, so track-level mean-pooling
+  discards most of the temporal resolution the 21x storage paid for. Max-pool and
+  count-in-top-k should behave quite differently from mean.
+- **The neighbour-selection heuristic risk is amplified.** Weak geometric signal
+  gives less to distinguish good neighbours from bad, so a naive top-`M` graph
+  will look fine and search badly. Phase 1 ground truth is the only thing that
+  catches it.
