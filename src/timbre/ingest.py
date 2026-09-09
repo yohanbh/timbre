@@ -16,7 +16,12 @@ from . import manifest
 from .audio import DecodeError, decode, windows
 from .embed import DIM, WINDOWS_PER_TRACK, Embedder
 
-N_WORKERS = 12          # leave headroom for GPU feeder + ffmpeg subprocesses
+# Each worker resident set is ~1.3 GiB, nearly all of it `import transformers`
+# (torch 612 MiB + processor 762 MiB); the CLAP model itself is only ~129 MiB.
+# Pages are shared copy-on-write after fork, so PSS per worker is ~230 MiB, but
+# 12 workers still exhausted swap on this 7.4 GiB box. 6 keeps the GPU fed
+# (needs 6.3 tracks/s; 6 workers supply ~7.7) with room to spare.
+N_WORKERS = 6
 QUEUE_DEPTH = 24        # max mel tensors in flight; 5.1 MiB each -> ~123 MiB
 FSYNC_EVERY = 1         # checkpoint interval in tracks
 
@@ -35,10 +40,13 @@ def _take(it, n):
 
 
 def _worker_init():
-    """Workers do decode AND mel: mel is the expensive part (~1394 ms/track vs
-    94 ms decode), so leaving it in the parent would recreate the bottleneck."""
+    """Workers do decode AND mel: mel is the expensive part (~800 ms/track vs
+    128 ms decode), so leaving it in the parent would recreate the bottleneck.
+
+    Thread limits are NOT set here -- torch and numpy size their pools at import,
+    which already happened when this process started. See _limit_threads.
+    """
     global _processor
-    os.environ["OMP_NUM_THREADS"] = "1"
     from transformers import ClapProcessor
     from .embed import MODEL_ID, MODEL_REVISION
     _processor = ClapProcessor.from_pretrained(MODEL_ID, revision=MODEL_REVISION)
@@ -61,7 +69,21 @@ def _prepare(task):
     return track_id, feats, len(wins), None
 
 
+def _limit_threads():
+    """Pin BLAS/OpenMP to one thread per process, before any child is forked.
+
+    Each worker otherwise starts ~17 threads; 6 workers put ~100 runnable threads
+    on 16 cores and throughput collapsed to 0.83 tracks/s. Setting these inside
+    the worker is too late -- the pools are sized at import time, which for a
+    forked child has already happened.
+    """
+    for var in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
+                "NUMEXPR_NUM_THREADS"):
+        os.environ[var] = "1"
+
+
 def run(audio_root, db_path, store_path, limit=None):
+    _limit_threads()
     embedder = Embedder()
     embedder.check_dim()  # never size the store on a guessed width
 
