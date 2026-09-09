@@ -8,10 +8,7 @@ With this ordering the worst case is redundant re-embedding that rewrites
 byte-identical data over the same rows.
 """
 import os
-import signal
-import sqlite3
-import sys
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 
 import numpy as np
 
@@ -20,10 +17,21 @@ from .audio import DecodeError, decode, windows
 from .embed import DIM, WINDOWS_PER_TRACK, Embedder
 
 N_WORKERS = 12          # leave headroom for GPU feeder + ffmpeg subprocesses
-QUEUE_DEPTH = 8         # bounds in-flight mel at ~41 MiB
+QUEUE_DEPTH = 24        # max mel tensors in flight; 5.1 MiB each -> ~123 MiB
 FSYNC_EVERY = 1         # checkpoint interval in tracks
 
 _processor = None
+
+
+def _take(it, n):
+    """Next n items from an iterator, or fewer if exhausted."""
+    out = []
+    for _ in range(n):
+        try:
+            out.append(next(it))
+        except StopIteration:
+            break
+    return out
 
 
 def _worker_init():
@@ -75,38 +83,53 @@ def run(audio_root, db_path, store_path, limit=None):
     done = 0
     tasks = [(t, p) for t, p, _ in pending]
     with ProcessPoolExecutor(N_WORKERS, initializer=_worker_init) as pool:
-        for track_id, feats, n_win, error in pool.map(_prepare, tasks, chunksize=1):
-            row_start = rows_by_id[track_id]
-            if error is not None:
-                status = "short" if error == "short" else "failed"
-                # Reserved slot stays zero-filled; SQLite records why.
+        # Bounded lookahead. ProcessPoolExecutor.map submits every task at once,
+        # so workers race ahead of the GPU and in-flight mel grows without limit
+        # (5.1 MiB/track x 25k tracks would OOM a 7.4 GiB box). Keep at most
+        # QUEUE_DEPTH futures alive and top up only as results are consumed.
+        pending_iter = iter(tasks)
+        futures = set()
+        for task in _take(pending_iter, QUEUE_DEPTH):
+            futures.add(pool.submit(_prepare, task))
+
+        while futures:
+            finished, futures = wait(futures, return_when=FIRST_COMPLETED)
+            for fut in finished:
+                track_id, feats, n_win, error = fut.result()
+                for task in _take(pending_iter, 1):
+                    futures.add(pool.submit(_prepare, task))
+
+                row_start = rows_by_id[track_id]
+                if error is not None:
+                    status = "short" if error == "short" else "failed"
+                    # Reserved slot stays zero-filled; SQLite records why.
+                    conn.execute(
+                        "UPDATE tracks SET status=?, n_windows=0, error=? WHERE track_id=?",
+                        (status, None if status == "short" else error, track_id),
+                    )
+                    conn.commit()
+                    continue
+
+                vecs = embedder.embed_features(feats)
+                assert vecs.shape == (n_win, DIM), vecs.shape
+
+                # 1. write real vectors, 2. zero-fill the rest of the reserved block
+                store[row_start:row_start + n_win] = vecs
+                if n_win < WINDOWS_PER_TRACK:
+                    store[row_start + n_win:row_start + WINDOWS_PER_TRACK] = 0.0
+
+                done += 1
+                if done % FSYNC_EVERY == 0:
+                    store.flush()          # msync
+                    os.fsync(store_fd)     # durable
+                # only now is it safe to mark done
                 conn.execute(
-                    "UPDATE tracks SET status=?, n_windows=0, error=? WHERE track_id=?",
-                    (status, None if status == "short" else error, track_id),
+                    "UPDATE tracks SET status='done', n_windows=?, error=NULL WHERE track_id=?",
+                    (n_win, track_id),
                 )
                 conn.commit()
-                continue
-
-            vecs = embedder.embed_features(feats)
-            assert vecs.shape == (n_win, DIM), vecs.shape
-
-            # 1. write real vectors, 2. zero-fill the rest of the reserved block
-            store[row_start:row_start + n_win] = vecs
-            if n_win < WINDOWS_PER_TRACK:
-                store[row_start + n_win:row_start + WINDOWS_PER_TRACK] = 0.0
-
-            done += 1
-            if done % FSYNC_EVERY == 0:
-                store.flush()          # msync
-                os.fsync(store_fd)     # durable
-            # only now is it safe to mark done
-            conn.execute(
-                "UPDATE tracks SET status='done', n_windows=?, error=NULL WHERE track_id=?",
-                (n_win, track_id),
-            )
-            conn.commit()
-            if done % 50 == 0:
-                print(f"  {done}/{len(pending)}", flush=True)
+                if done % 50 == 0:
+                    print(f"  {done}/{len(pending)}", flush=True)
 
     store.flush()
     os.fsync(store_fd)
