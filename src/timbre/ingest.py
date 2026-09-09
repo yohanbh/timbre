@@ -12,7 +12,7 @@ from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 
 import numpy as np
 
-from . import manifest
+from . import manifest, metadata
 from .audio import DecodeError, decode, windows
 from .embed import DIM, WINDOWS_PER_TRACK, Embedder
 
@@ -82,12 +82,15 @@ def _limit_threads():
         os.environ[var] = "1"
 
 
-def run(audio_root, db_path, store_path, limit=None):
+def run(audio_root, db_path, store_path, limit=None,
+        csv_path="data/fma_metadata/tracks.csv"):
     _limit_threads()
     embedder = Embedder()
     embedder.check_dim()  # never size the store on a guessed width
 
     conn, _ = manifest.build(audio_root, db_path, store_path)
+    if csv_path and os.path.exists(csv_path):
+        metadata.load(conn, csv_path)  # idempotent; cheap next to embedding
     pending = conn.execute(
         "SELECT track_id, path, row_start FROM tracks WHERE status='pending' ORDER BY track_id"
     ).fetchall()
