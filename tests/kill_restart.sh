@@ -6,7 +6,7 @@ set -u
 ROOT="$1"; DB="$2"; ST="$3"; KILLS="${4:-5}"; MINW="${5:-3}"; MAXW="${6:-12}"
 cd /home/yohanb/timbre
 
-run() { PYTHONPATH=src python3 -m timbre.ingest --audio-root "$ROOT" --db "$DB" --store "$ST" >/dev/null 2>&1; }
+run() { PYTHONPATH=src python3 -m timbre --audio-root "$ROOT" --db "$DB" --store "$ST" >/dev/null 2>&1; }
 hash_store() { sha256sum "$ST" | cut -d' ' -f1; }
 hash_db() { PYTHONPATH=src python3 -c "
 import sys;from timbre.verify import hash_db;print(hash_db('$DB'))" 2>/dev/null | tail -1; }
@@ -18,7 +18,7 @@ echo "reference db   : $REF_D"
 
 rm -f "$DB"* "$ST"
 for i in $(seq 1 "$KILLS"); do
-  PYTHONPATH=src python3 -m timbre.ingest --audio-root "$ROOT" --db "$DB" --store "$ST" >/dev/null 2>&1 &
+  PYTHONPATH=src python3 -m timbre --audio-root "$ROOT" --db "$DB" --store "$ST" >/dev/null 2>&1 &
   PID=$!
   WAIT=$(python3 -c "import random;print(round(random.uniform($MINW,$MAXW),1))")
   sleep "$WAIT"
