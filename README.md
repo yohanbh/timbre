@@ -84,6 +84,22 @@ Library versions and the model commit SHA are recorded in the `meta` table, and 
 resume against a changed environment is refused rather than silently producing
 different bytes.
 
+### Corpus reality: 20 windows, not 21
+
+The spec sizes the index at 21 windows/track from 30 s clips. Measured on the real
+corpus, **59% of fma_medium decodes to 29.9766 s** -- 23 ms short of 30.0 s, an mp3
+encoder artifact rather than genuinely short music (zero sampled tracks were short
+by more than a second). Those tracks yield 20 windows, not 21.
+
+We keep the strict 480,000-sample window rather than zero-padding to force a 21st.
+Every stored vector is then real audio: padding would produce a 21st vector that is
+99.9% a duplicate of window 20 shifted by 1 s, plus 0.1% silence. The store is still
+allocated at 21 rows/track, `n_windows` records the true count, and the unused row
+stays zero-filled -- the design already absorbs this without change.
+
+Consequence: ~505K real vectors rather than 525K, and "21 windows per track" in the
+spec is really "20 or 21".
+
 ### Design notes
 
 - **Fixed manifest pre-pass.** Row assignment is `manifest_index * 21`, a pure
