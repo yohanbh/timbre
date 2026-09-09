@@ -29,10 +29,23 @@ bash tests/kill_restart.sh <audio_root> <db> <store> 5  # the acceptance gate
 With 12 workers the CPU pool supplies 10.8 tracks/s against 6.3 tracks/s of GPU
 capacity, so the pipeline is GPU-bound by design — the irreducible cost. Without
 the pool a single CPU feeds only 0.9 tracks/s and the GPU idles ~85%. Peak VRAM
-1475 MiB, peak RSS 2.1 GiB. Projected full-corpus run: **~1.1 h for 25,000 tracks**.
+1475 MiB. Measured full-corpus run: **25,000 tracks in ~1.4 h at 5.0 tracks/s**,
+GPU pegged at 91-97%, ~1.6 GiB RAM free throughout.
 
-These figures come from synthetic constant-bitrate audio. Real FMA mp3s are VBR
-and decode more slowly, so treat 1.1 h as a floor rather than a prediction.
+### Thread oversubscription (the bug that cost the most)
+
+Setting `OMP_NUM_THREADS=1` inside the worker initializer is a **no-op**: BLAS and
+OpenMP size their thread pools when numpy/torch are *imported*, which for a forked
+worker has already happened. Each worker started ~17 threads; 6 workers put ~100
+runnable threads on 16 cores, and throughput collapsed to **0.83 tracks/s** (8.4 h
+ETA) with the GPU idling at 8% and CPU at 98.5% user.
+
+The fix is `src/timbre/__main__.py`, which sets the limits before importing
+anything heavy. After: 2 threads/worker, 5.0 tracks/s, GPU 96%. Run as
+`python -m timbre`, not `python -m timbre.ingest`.
+
+The diagnostic signature worth remembering: **high user CPU with an idle GPU means
+contention, not starvation.** Check thread counts before tuning worker counts.
 
 ### Backpressure
 
@@ -97,8 +110,24 @@ Every stored vector is then real audio: padding would produce a 21st vector that
 allocated at 21 rows/track, `n_windows` records the true count, and the unused row
 stays zero-filled -- the design already absorbs this without change.
 
-Consequence: ~505K real vectors rather than 525K, and "21 windows per track" in the
-spec is really "20 or 21".
+Consequence: **510,064 real vectors** rather than 525,000, and "21 windows per
+track" in the spec is really "20 or 21".
+
+### Final corpus results
+
+| | |
+|---|---|
+| Tracks | 25,000 |
+| Embedded | 24,980 (99.92%) |
+| Failed (corrupt mp3) | 15 |
+| Short (<10 s) | 5 |
+| Real vectors | 510,064 |
+| Store | 1,075,200,128 bytes |
+| Window split | 14,513 tracks x20, 10,466 x21, 1 x18 |
+
+Phase gate verified at full scale: 400 completed tracks reset and re-embedded
+across two SIGKILLs, converging to byte-identical store and bookkeeping hashes
+(`664ef3c0...` / `8f52a7a4...`).
 
 ### Design notes
 
