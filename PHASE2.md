@@ -80,6 +80,20 @@ USE_TF=0 OPENBLAS_NUM_THREADS=1 PYTHONPATH=src \
   python3 -m pytest tests/test_hnsw.py tests/test_hnsw_benchmark.py -q
 ```
 
+Compare both search methods on one random held-out passage, with optional audio:
+
+```bash
+PYTHONPATH=src python3 tests/compare_search.py --play
+# Repeat the same query while changing the HNSW search effort.
+PYTHONPATH=src python3 tests/compare_search.py --seed 42 --ef-search 64
+PYTHONPATH=src python3 tests/compare_search.py --seed 42 --ef-search 128
+```
+
+Both methods search the saved 125k candidate set, exclude the query's entire
+track, and display five distinct tracks with their matching passages. The tool
+reports track overlap and unfiltered segment recall@10. Timings include track
+aggregation and exclude loading; one warm query is not a performance benchmark.
+
 Artifacts live under `store/hnsw_phase2`: the sampled exact oracle, graph
 checkpoints, per-graph build metadata, and `results.json`. The report contains
 all measured points and the nondominated recall@10/median-latency frontier.
@@ -132,3 +146,57 @@ run on shared laptop hardware; small differences should not be treated as
 statistically established wins. These are 125k-subset results, not full-store or
 large-corpus results. Third-party baselines and insertion-order comparisons remain
 separate experiments.
+
+## Full-medium baseline (2026-09-10)
+
+The next size baseline is complete using the existing embeddings: **509,064
+indexed segments and the same 1,000 held-out queries**. Every populated medium
+store row except those query rows is indexed. Exact top-100 neighbors were
+recomputed over this candidate set and saved separately from the 125k oracle.
+
+This run builds one graph with **M=8, efConstruction=80**, shuffled insertion,
+and seed 20260909, then measures all five search settings. It uses the same
+Python/NumPy implementation and one CPU/BLAS thread as the original benchmark.
+
+| efSearch | Recall@10 | Median | p95 | p99 |
+|---|---|---|---|---|
+| 16 | 98.92% | 0.456 ms | 0.808 ms | 1.170 ms |
+| 32 | 99.60% | 0.644 ms | 1.006 ms | 1.301 ms |
+| 64 | **99.85%** | **1.139 ms** | **1.835 ms** | **2.217 ms** |
+| 128 | 99.89% | 1.915 ms | 3.605 ms | 4.286 ms |
+| 256 | 99.90% | 3.609 ms | 5.534 ms | 6.835 ms |
+
+All five points exceed the 95% recall gate. Construction took **862.7 seconds
+(14 minutes 23 seconds)**, including initialization and periodic checkpoints.
+The serialized graph is **34.89 MiB**, excluding **994.27 MiB** of candidate
+vectors. Peak RSS for the entire benchmark process was **3.87 GiB**; it includes
+imports, source arrays and temporary copies, and is not graph-only memory.
+
+Compared with the 125k graph at the same settings, the candidate count is
+4.07 times larger, build time is 4.56 times longer, and median query latency at
+efSearch=64 rose from 0.984 to 1.139 ms (15.7%). These are single warm-cache runs
+on the same laptop; timing differences are descriptive, not statistical claims.
+
+The exact target also changes with corpus size. Same-track sibling windows
+account for **94.93%** of full-medium exact top-10 hits, versus 41.62% in the
+125k sample; 81.5% of full-medium queries have an entirely sibling top-10.
+Recall here measures agreement with exact segment neighbors. Cross-track recall
+and human musical relevance remain separate evaluations.
+
+Validation checked source/cache identity, complete candidate membership, zero
+candidate/query overlap, and graph structure and IDs. Reloading the completed
+graph reproduced **99.85% recall@10 across all 1,000 queries** at efSearch=64.
+The original 125k report remains unchanged.
+
+```bash
+PYTHONPATH=src python3 -m timbre.benchmark_hnsw \
+  --vectors 509064 --queries 1000 --m 8 --ef-construction 80 \
+  --ef-search 16 32 64 128 256 --out store/hnsw_medium
+```
+
+Artifacts are in `store/hnsw_medium`, with the run log at
+`store/hnsw_medium.log`. The [full-medium report](docs/hnsw_medium_results.json)
+contains all five points, throughput, distance counts and the frontier. Saved
+graphs are reused when rerunning the command.
+
+![Full-medium recall/latency sweep](docs/hnsw_medium_frontier.svg)

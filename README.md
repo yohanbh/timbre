@@ -43,6 +43,17 @@ See [implementation and benchmark protocol](PHASE2.md) and
 PYTHONPATH=src python3 -m timbre.benchmark_hnsw
 ```
 
+The **full-medium baseline** is also complete: **509,064 indexed segments** plus
+the same 1,000 held-out queries, using the existing embeddings. At
+`M=8, efConstruction=80, efSearch=64`, it reaches **99.85% recall@10, 1.139 ms
+median and 1.835 ms p95**. Build time was **14 minutes 23 seconds**; the serialized
+graph is **34.89 MiB**, excluding vectors. Reloading reproduces the recall result.
+This is one graph with five search settings. See the
+[full-medium protocol and comparison](PHASE2.md#full-medium-baseline-2026-09-10)
+and [measured results](docs/hnsw_medium_results.json). Most exact neighbors at
+this size are overlapping windows from the query's own track; musical relevance
+requires separate evaluation.
+
 ## Retrieval and validation
 
 ```bash

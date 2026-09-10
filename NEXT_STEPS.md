@@ -1,7 +1,8 @@
 # Next steps
 
-Phases 0, 1 and 2 are implemented. The checkpoint migration is complete and the
-HNSW benchmark passes its recall gate. See [RETRIEVAL_DIAGNOSIS.md](RETRIEVAL_DIAGNOSIS.md)
+Phases 0, 1 and 2 are implemented. The checkpoint migration and full-medium
+baseline are complete; both HNSW benchmark sizes pass the recall gate.
+See [RETRIEVAL_DIAGNOSIS.md](RETRIEVAL_DIAGNOSIS.md)
 for the retrieval repair and [PHASE2.md](PHASE2.md) for index implementation and results.
 
 ## Current store
@@ -113,9 +114,24 @@ USE_TF=0 OPENBLAS_NUM_THREADS=1 PYTHONPATH=src python3 -m pytest -q -m 'not slow
 ## Next: Phase 3 and remaining experiments
 
 Per the spec, Phase 3 is the C++ distance/search loop, larger corpus, and memory
-limit experiments. It has not started. The full 510k medium-store HNSW benchmark
-is also available by increasing `--vectors` (subtract held-out query rows from
-the indexed count) and choosing a new output directory.
+limit experiments. Those implementation steps have not started. The full-medium
+Python baseline is now complete, providing the next comparison point for C++.
+
+The graph contains **509,064 candidate segments**, with all 1,000 fixed query
+rows held out. At **M=8, efConstruction=80, efSearch=64**, it reaches **99.85%
+recall@10, 1.139 ms median and 1.835 ms p95**. Construction took 862.7 seconds;
+the graph serializes to 34.89 MiB, excluding vectors. All five efSearch settings
+passed the recall gate, and reloading reproduced the efSearch=64 result.
+
+Artifacts and the recomputed exact oracle are in `store/hnsw_medium`.
+See the [full-medium results and validation](PHASE2.md#full-medium-baseline-2026-09-10).
+Reproduce with:
+
+```bash
+PYTHONPATH=src python3 -m timbre.benchmark_hnsw \
+  --vectors 509064 --queries 1000 --m 8 --ef-construction 80 \
+  --ef-search 16 32 64 128 256 --out store/hnsw_medium
+```
 
 Still-open experiments include max versus mean versus count aggregation,
 insertion order (`--order track` versus the default shuffled order), third-party

@@ -29,7 +29,7 @@ def main():
                 marker="o", markersize=4, label=f"M={M}, efConstruction={ef}")
     ax.axhline(0.95, color="#666666", linestyle="--", linewidth=1, label="Phase 2 target: 0.95")
     ax.set(xscale="log", xlabel="Median query latency (ms, warm cache)", ylabel="Recall@10",
-           ylim=(min(p["recall_at_10"] for p in report["points"]) - 0.025, 1.005))
+           ylim=(min(0.94, min(p["recall_at_10"] for p in report["points"]) - 0.025), 1.005))
     ax.set_title(f"HNSW: {report['vectors']:,} segments, {report['queries']:,} held-out queries\n"
                  "Python + NumPy, one CPU thread", loc="left", fontsize=12)
     ax.grid(alpha=0.2)
