@@ -12,6 +12,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+plots = ["matplotlib>=3.8"]
 
 [build-system]
 requires = ["setuptools>=68"]

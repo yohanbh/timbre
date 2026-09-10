@@ -1,8 +1,8 @@
 # Next steps
 
-Phases 0 and 1 are implemented. The checkpoint migration is complete; Phase 2
-has not started. See [RETRIEVAL_DIAGNOSIS.md](RETRIEVAL_DIAGNOSIS.md) for the failure
-analysis, controlled comparison, and repair validation.
+Phases 0, 1 and 2 are implemented. The checkpoint migration is complete and the
+HNSW benchmark passes its recall gate. See [RETRIEVAL_DIAGNOSIS.md](RETRIEVAL_DIAGNOSIS.md)
+for the retrieval repair and [PHASE2.md](PHASE2.md) for index implementation and results.
 
 ## Current store
 
@@ -86,17 +86,39 @@ All candidate row IDs must come from `load_layout`; the mmap reserves 21 rows
 per track but most tracks fill 20, leaving zero-filled holes. Segment offsets
 are derivable from row IDs and each track's row start.
 
-## Phase 2 — HNSW from scratch
+## Phase 2 — complete
 
-Implement exponential layer assignment, greedy descent, beam search at layer 0,
-insertion with bidirectional links and pruning, the neighbor-selection heuristic,
-and graph serialization. Do not substitute a third-party index in the serving path.
+`src/timbre/hnsw.py` implements exponential layers, greedy descent, beam search,
+diversified neighbor selection, reciprocal insertion with bounded pruning, and
+graph serialization. Graph reload verifies the exact vector fingerprint; saved
+random-generator state supports continued insertion. No third-party ANN code is
+used by the implementation.
 
-Done when recall@10 is at least 0.95 against Phase 1 ground truth, with an
-`M × efConstruction × efSearch` sweep showing the recall/latency frontier.
+The spec's Phase 2 benchmark uses a reproducible 125,000-vector subset, with all
+1,000 query rows held out from construction. `benchmark_hnsw` recomputes the exact
+oracle over that candidate set; the full-corpus cache above is not a valid oracle
+for a subset graph. Artifacts live in `store/hnsw_phase2`, and all 20 measured
+parameter combinations are recorded in `docs/hnsw_results.json`.
 
-Re-measure geometric properties on the replacement embeddings before drawing
-conclusions from the old checkpoint's anisotropy. Still-open experiments include
-max versus mean versus count aggregation, shuffled insertion order, and human
-evaluation of text/audio retrieval. The user's concrete listening examples are
-tracks 2, 3, and 10, including the fifth neighbor of track 10.
+Recommended measured setting: **M=8, efConstruction=80, efSearch=64**. It achieved
+99.43% recall@10, 0.984 ms median and 1.179 ms p95 query latency, on one CPU thread.
+Build time was 189 seconds; the serialized graph is 8.89 MiB, excluding vectors.
+Re-loading the 125,000-node graph reproduces the measured recall.
+
+```bash
+PYTHONPATH=src python3 -m timbre.benchmark_hnsw
+USE_TF=0 OPENBLAS_NUM_THREADS=1 PYTHONPATH=src python3 -m pytest -q -m 'not slow'
+```
+
+## Next: Phase 3 and remaining experiments
+
+Per the spec, Phase 3 is the C++ distance/search loop, larger corpus, and memory
+limit experiments. It has not started. The full 510k medium-store HNSW benchmark
+is also available by increasing `--vectors` (subtract held-out query rows from
+the indexed count) and choosing a new output directory.
+
+Still-open experiments include max versus mean versus count aggregation,
+insertion order (`--order track` versus the default shuffled order), third-party
+benchmark baselines, and human evaluation of text/audio retrieval. The user's
+concrete listening examples are tracks 2, 3 and 10, including the fifth neighbor
+of track 10. Keep musical relevance separate from geometric index recall.

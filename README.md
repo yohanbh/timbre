@@ -16,6 +16,33 @@ from **31.5% to 70.0%** (chance 17.2%). This holds the aggregation rule constant
 to measure the checkpoint change; genre agreement is a proxy, not a listening
 judgment. The listening tool separately uses matching segments as described below.
 
+## Phase 2 — HNSW
+
+The hand-written Python/NumPy index passes the Phase 2 gate on **125,000 indexed
+segments and 1,000 held-out queries**. The 20-point parameter sweep uses exact
+neighbors recomputed over that same candidate set.
+
+| M | efConstruction | efSearch | Recall@10 | Median | p95 |
+|---|---|---|---|---|---|
+| 8 | 80 | 16 | 95.72% | 0.386 ms | 0.524 ms |
+| 8 | 80 | 32 | 98.36% | 0.581 ms | 0.760 ms |
+| 8 | 80 | 64 | **99.43%** | **0.984 ms** | **1.179 ms** |
+| 16 | 160 | 64 | 99.85% | 1.650 ms | 2.460 ms |
+
+Measured on an AMD Ryzen 7 5800H, with one CPU/BLAS thread and warm caches.
+The `M=8, efConstruction=80` graph took 189 seconds to build and 8.89 MiB to
+serialize, excluding vectors. Re-loading it reproduces the 99.43% recall result.
+These timings describe the 125k benchmark, not the complete 510k-vector store.
+
+![HNSW recall versus query latency](docs/hnsw_frontier.svg)
+
+See [implementation and benchmark protocol](PHASE2.md) and
+[all measured results](docs/hnsw_results.json). Run:
+
+```bash
+PYTHONPATH=src python3 -m timbre.benchmark_hnsw
+```
+
 ## Retrieval and validation
 
 ```bash

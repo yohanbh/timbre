@@ -96,7 +96,8 @@ be scored against them with one function call.
 
 ### Phase 2 — HNSW, written from scratch (1–1½ weekends)
 
-The real work. Pure Python with NumPy-vectorized distance computation, on the 125K-vector medium set.
+The real work. Pure Python with NumPy-vectorized distance computation, on a reproducible
+125K-vector subset of the medium store, with exact ground truth for that same candidate set.
 Correctness first; slow is fine at this size.
 
 Required components:
