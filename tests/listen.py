@@ -1,86 +1,106 @@
-"""Print a query track and its nearest neighbours, with ffplay commands.
-
-Genre labels are a weak proxy for "sounds similar" -- this exists so a human can
-check whether the retrieval is musically sensible. Prints paths; pass --play to
-actually play 10 s of each through ffplay.
+"""Print and optionally play the actual ten-second query and matching passages.
 
 Usage:
-    PYTHONPATH=src python3 tests/listen.py              # random query track
-    PYTHONPATH=src python3 tests/listen.py --track 1234 # specific track id
+    PYTHONPATH=src python3 tests/listen.py --track 2 --offset 10 --play
     PYTHONPATH=src python3 tests/listen.py --text "sparse melancholy piano"
-    PYTHONPATH=src python3 tests/listen.py --play       # play them
+
+Scores are the best segment cosine for each distinct candidate track.
 """
+import os
+
+for var in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
+    os.environ[var] = "1"
+os.environ.setdefault("USE_TF", "0")
+
 import argparse
+import shlex
 import sqlite3
 import subprocess
 
 import numpy as np
 
-DB = "store/timbre.db"
-STORE = "store/vectors.npy"
+from timbre.embed import HOP_SECONDS, Embedder
+from timbre.groundtruth import load_layout
+from timbre.manifest import check_versions
+from timbre.search import exact_track_topk
 
 
-def load():
-    store = np.load(STORE, mmap_mode="r")
-    conn = sqlite3.connect(DB)
-    rows = conn.execute(
-        "SELECT track_id, row_start, n_windows, title, artist, genre, path "
-        "FROM tracks WHERE status='done' AND n_windows > 0"
-    ).fetchall()
-    conn.close()
-    V = np.empty((len(rows), 512), dtype=np.float32)
-    for i, r in enumerate(rows):
-        V[i] = np.asarray(store[r[1]:r[1] + r[2]]).mean(0)
-    V /= np.linalg.norm(V, axis=1, keepdims=True)
-    return V, rows
-
-
-def text_vector(query):
-    """Embed a text query into the same space (CLAP is joint audio-text)."""
-    import torch
-    from transformers import ClapModel, ClapProcessor
-    from timbre.embed import MODEL_ID, MODEL_REVISION
-    model = ClapModel.from_pretrained(MODEL_ID, revision=MODEL_REVISION).eval().cuda()
-    proc = ClapProcessor.from_pretrained(MODEL_ID, revision=MODEL_REVISION)
-    t = proc(text=[query], return_tensors="pt", padding=True)
-    with torch.inference_mode():
-        e = model.get_text_features(**{k: v.cuda() for k, v in t.items()})
-    e = e.cpu().numpy()[0]
-    return e / np.linalg.norm(e)
+def play_command(path, offset):
+    return ["ffplay", "-v", "error", "-autoexit", "-ss", str(offset),
+            "-t", "10", "-nodisp", path]
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--track", type=int, help="query by track id")
-    ap.add_argument("--text", help="query by text phrase")
-    ap.add_argument("--play", action="store_true", help="play 10 s of each via ffplay")
+    ap = argparse.ArgumentParser(description=__doc__)
+    query = ap.add_mutually_exclusive_group()
+    query.add_argument("--track", type=int, help="query by track id")
+    query.add_argument("--text", help="query by text phrase")
+    ap.add_argument("--offset", type=int, default=0, help="query window start in seconds")
+    ap.add_argument("--db", default="store/timbre.db")
+    ap.add_argument("--store", default="store/vectors.npy")
+    ap.add_argument("--play", action="store_true", help="play each matching passage")
     ap.add_argument("-k", type=int, default=5)
     a = ap.parse_args()
+    if a.k < 1 or a.offset < 0 or a.offset % HOP_SECONDS:
+        ap.error("k must be positive and offset must be a nonnegative window start")
+    if a.text and a.offset:
+        ap.error("--offset applies only to audio queries")
 
-    V, rows = load()
-    ids = [r[0] for r in rows]
+    # Read candidate IDs first so metadata includes all of them even while an
+    # ingest is adding completed tracks. Existing completed rows are immutable.
+    row_ids, owner = load_layout(a.db)
+    with sqlite3.connect(f"file:{a.db}?mode=ro", uri=True) as conn:
+        if a.text:
+            # Audio queries reuse stored vectors; text must use the same model.
+            try:
+                check_versions(conn)
+            except RuntimeError as error:
+                ap.error(str(error))
+        rows = conn.execute(
+            "SELECT track_id, row_start, n_windows, title, artist, genre, path "
+            "FROM tracks WHERE status='done' AND n_windows > 0 ORDER BY track_id"
+        ).fetchall()
+    if not rows:
+        ap.error("no embedded tracks in this store")
+    tracks = {r[0]: r for r in rows}
+    store = np.load(a.store, mmap_mode="r")
 
+    def show_audio(t, offset):
+        command = play_command(t[6], offset)
+        print(f"    {shlex.join(command)}", flush=True)
+        if a.play:
+            subprocess.run(command, check=True)
+
+    query_track = None
     if a.text:
-        q = text_vector(a.text)
-        print(f'query: "{a.text}"\n')
+        embedder = Embedder()
+        embedder.check_text_separation()
+        q = embedder.embed_text([a.text])[0]
+        print(f'query: "{a.text}"', flush=True)
     else:
-        qi = ids.index(a.track) if a.track else np.random.default_rng().integers(len(V))
-        q = V[qi]
-        t = rows[qi]
-        print(f"query: {t[3]!r} by {t[4]} [{t[5]}]  (track {t[0]})")
-        if a.play:
-            subprocess.run(["ffplay", "-v", "error", "-autoexit", "-t", "10", "-nodisp", t[6]])
-        print()
+        query_track = a.track if a.track is not None else int(
+            np.random.default_rng().choice(list(tracks))
+        )
+        if query_track not in tracks:
+            ap.error(f"track {query_track} is not embedded in this store")
+        t = tracks[query_track]
+        window = a.offset // HOP_SECONDS
+        if window >= t[2]:
+            ap.error(f"track {query_track}: last window starts at {(t[2] - 1) * HOP_SECONDS}s")
+        q = np.asarray(store[t[1] + window])
+        print(f"query: {t[3]!r} by {t[4]} [{t[5]}] "
+              f"(track {t[0]}, {a.offset}–{a.offset + 10}s)", flush=True)
+        show_audio(t, a.offset)
 
-    sims = V @ q
-    if not a.text:
-        sims[qi] = -np.inf
-    for rank, i in enumerate(np.argsort(-sims)[:a.k], 1):
-        t = rows[i]
-        print(f"{rank}. {sims[i]:.3f}  {(t[3] or '?')[:36]:36s} {(t[4] or '?')[:18]:18s} [{t[5]}]")
-        print(f"           {t[6]}")
-        if a.play:
-            subprocess.run(["ffplay", "-v", "error", "-autoexit", "-t", "10", "-nodisp", t[6]])
+    ids, hit_rows, scores = exact_track_topk(
+        store, q, row_ids, owner, k=a.k, exclude_track=query_track
+    )
+    for rank, (tid, row, score) in enumerate(zip(ids, hit_rows, scores), 1):
+        t = tracks[tid]
+        offset = int(row - t[1]) * HOP_SECONDS
+        print(f"{rank}. {score:.3f}  {t[3]!r} by {t[4]} [{t[5]}] "
+              f"(track {tid}, {offset}–{offset + 10}s)", flush=True)
+        show_audio(t, offset)
 
 
 if __name__ == "__main__":

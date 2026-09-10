@@ -22,6 +22,20 @@ def test_windowing_counts():
     assert len(windows(np.zeros(48000 * 9, dtype=np.float32))) == 0
 
 
+def test_collapsed_checkpoint_is_rejected(monkeypatch):
+    emb = object.__new__(Embedder)
+    constant = np.zeros((4, 512), dtype=np.float32)
+    constant[:, 0] = 1
+    monkeypatch.setattr(emb, "embed_text", lambda texts: constant)
+    with pytest.raises(RuntimeError, match="collapsed"):
+        emb.check_text_separation()
+
+
+@pytest.mark.slow
+def test_checkpoint_separates_unrelated_text():
+    assert Embedder().check_text_separation() < 0.99
+
+
 @pytest.mark.slow
 def test_embedding_is_bit_reproducible():
     """Same batch twice must be bit-identical -- the core of the phase gate."""

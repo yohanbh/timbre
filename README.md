@@ -4,6 +4,52 @@ Audio similarity search over the Free Music Archive, on a hand-written HNSW inde
 See `TIMBRE_SPEC.md` for scope. **The index is the project**; Phase 0 is the pipeline
 that feeds it.
 
+The embedding model is pinned to `laion/larger_clap_general` at
+`ada0c23a36c4e8582805bb38fec3905903f18b41`. The original music checkpoint
+produced collapsed text embeddings and weak audio retrieval; see
+[the diagnosis and controlled comparison](RETRIEVAL_DIAGNOSIS.md).
+
+The full rebuild is active at `store/timbre.db`, `store/vectors.npy`, and
+`store/groundtruth.npz`; the original files are archived in `store/legacy_music`.
+On the same 2,000 queries against all 24,980 tracks, track-mean genre@10 improved
+from **31.5% to 70.0%** (chance 17.2%). This holds the aggregation rule constant
+to measure the checkpoint change; genre agreement is a proxy, not a listening
+judgment. The listening tool separately uses matching segments as described below.
+
+## Retrieval and validation
+
+```bash
+# Search a particular passage; play the matching passage from each distinct track.
+PYTHONPATH=src python3 tests/listen.py --track 2 --offset 10 -k 5 --play
+PYTHONPATH=src python3 tests/listen.py --text "sparse melancholy piano" -k 5 --play
+
+# Rebuild exact segment neighbors after any vector-store/model change.
+PYTHONPATH=src python3 -m timbre.build_groundtruth
+USE_TF=0 PYTHONPATH=src python3 -m pytest -q
+```
+
+Listening uses each track's **best segment score**, and plays that segment's
+actual offset. The query's entire track is excluded for audio queries. Text
+queries are rejected if the store's embedding configuration differs from the
+query model. Ingest checks for collapsed text embeddings before starting.
+
+Ground truth measures geometric index recall, not human judgments of musical
+similarity. Both unfiltered and sibling-excluded top-100 lists are cached. Load
+them with the source-validation helper so an old cache cannot silently be used
+after a model or data change:
+
+```python
+from timbre.groundtruth import load_groundtruth, recall_at_k
+
+truth = load_groundtruth("store/groundtruth.npz", "store/timbre.db", "store/vectors.npy")
+# recall_at_k(candidate_ids, truth["gt_ids"], 10)
+```
+
+Cache validation checks hashes of the vectors and the manifest (including model
+revision and genre labels). The builder refuses an incomplete ingest. The
+existing resume check refuses to mix different embedding configurations in one
+store; rebuild into a separate directory when changing models.
+
 ## Phase 0 — Ingest pipeline
 
 ```
@@ -13,12 +59,12 @@ mp3 ──► ffmpeg decode ──► 21 windows ──► CLAP ──► mmap .
 
 ```bash
 uv sync
-python -m timbre.ingest --audio-root data/fma_medium   # resumable; just rerun after a crash
+python -m timbre --audio-root data/fma_medium          # resumable; just rerun after a crash
 python -m timbre.verify                                 # hashes + integrity checks
 bash tests/kill_restart.sh <audio_root> <db> <store> 5  # the acceptance gate
 ```
 
-### Measured on this machine (RTX 3060 6 GB, 16 cores, 7.4 GiB RAM)
+### Original pipeline measurements (RTX 3060 6 GB, 16 cores, 7.4 GiB RAM)
 
 | Stage | Cost per track |
 |---|---|
@@ -125,9 +171,11 @@ track" in the spec is really "20 or 21".
 | Store | 1,075,200,128 bytes |
 | Window split | 14,513 tracks x20, 10,466 x21, 1 x18 |
 
-Phase gate verified at full scale: 400 completed tracks reset and re-embedded
-across two SIGKILLs, converging to byte-identical store and bookkeeping hashes
-(`664ef3c0...` / `8f52a7a4...`).
+The original music-checkpoint store passed a full-scale kill/restart experiment:
+400 completed tracks reset and re-embedded across two SIGKILLs, converging to the
+same store bytes (`664ef3c0...`). The replacement passes store integrity, GPU
+determinism, and crash-window regression checks. Its vector SHA-256 is
+`67bfc23b7f26fe97c0751192be478ebfea50464462c334ed44cbc9af7026d3da`.
 
 ### Design notes
 
@@ -143,10 +191,15 @@ across two SIGKILLs, converging to byte-identical store and bookkeeping hashes
   break the atomic commit above. Materialize later if Phase 1/2 profiling shows
   the range scan hurts.
 
-## Embedding space: measured properties
+## Original music checkpoint: historical measurements
 
-Measured on the finished store (510,064 vectors). These are findings, not bugs,
-and they bear directly on spec open questions #1 and #2.
+**2026-09-09 diagnostic update:** these are measurements of the original
+`larger_clap_music` store, not the replacement general checkpoint. Their earlier
+interpretation as inherent CLAP limitations was incorrect; see
+[the retrieval investigation](RETRIEVAL_DIAGNOSIS.md).
+
+Measured on the original store (510,064 vectors). Re-evaluate geometric and
+aggregation hypotheses on the replacement vectors before proceeding to HNSW.
 
 ### The space is strongly anisotropic
 
@@ -158,9 +211,8 @@ and they bear directly on spec open questions #1 and #2.
 | Top-1 principal component variance share | 45% |
 | Participation ratio | **4.3 effective dims of 512** |
 
-Every vector points in nearly the same direction. This is CLAP's, not ours: a
-fresh embed reproduces stored bytes exactly, and independently embedded tracks
-show the same ~0.88 geometry.
+Vectors concentrate in nearly the same direction. A fresh embed reproduces this
+geometry, which establishes reproducibility but does not validate the checkpoint.
 
 ### Mean-centering does not help (tested, rejected)
 
@@ -173,10 +225,9 @@ dramatic fix, but retrieval quality is unchanged:
 | raw | **31.5%** | 0.864 | 0.177 |
 | centered | 32.6% | 0.045 | 0.441 |
 
-+1.1% at n=2000 is noise. Subtracting a constant shifts all points equally and
-largely preserves *ranking*, and retrieval only cares about ranking. Anisotropy
-makes absolute scores look alike without destroying their order. **We index the
-raw space** -- simpler, and no preprocessing step for a query path to replicate.
+The measured improvement was small. Centering followed by normalization can
+change cosine rankings; it cannot be dismissed as a translation that preserves
+distances. This experiment does not validate the original checkpoint.
 
 Chance is 17.2%, not 1/16: the corpus is skewed (28% Rock, 25% Electronic), so
 that is the sum of squared genre shares. Reproduce with
@@ -187,18 +238,19 @@ that is the sum of squared genre shares. Reproduce with
 31.5% genre@10 against 17.2% chance is ~1.8x. Listening confirms it: neighbours
 often share production era while differing in genre and instrumentation.
 
-Three hypotheses for the weakness were tested and **ruled out**, so they need not
-be re-investigated:
+Earlier diagnostics considered these hypotheses, but did not establish causality:
 
 | Hypothesis | Measurement | Verdict |
 |---|---|---|
-| Hubness (universal neighbours) | top track appears 7x vs 0.4 expected; 71% of tracks appear 0 times | mild, not causal |
-| Mean-pooling washes out detail | within-track window similarity **0.979** | ruled out: pooling loses ~nothing |
-| Keying on encoding/production | genre agreement 37% > bitrate agreement 30.5% | ruled out: signal is musical |
+| Hubness (universal neighbours) | top track appears 7x vs 0.4 expected; 71% of tracks appear 0 times | descriptive only |
+| Mean-pooling washes out detail | within-track window similarity **0.979** | inconclusive given overlap and high unrelated-track cosine |
+| Keying on encoding/production | genre agreement 37% > bitrate agreement 30.5% | inconclusive: different label distributions |
 
-The conclusion is simply that CLAP discriminates weakly on this corpus.
+The controlled checkpoint comparison identifies the original checkpoint as the
+leading cause: changing it raised genre@10 from 25.3% to 57.4% on the same
+512-track candidate pool, with identical audio preprocessing.
 
-### Consequences for later phases
+### Earlier hypotheses for later phases (require new measurements)
 
 - **Open question #1 now has a mechanism.** Standard HNSW benchmarks (SIFT, GIST)
   use far more isotropic data. A graph where nearly all distances sit near 0.87

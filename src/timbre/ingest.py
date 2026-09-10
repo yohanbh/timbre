@@ -87,6 +87,7 @@ def run(audio_root, db_path, store_path, limit=None,
     _limit_threads()
     embedder = Embedder()
     embedder.check_dim()  # never size the store on a guessed width
+    embedder.check_text_separation()
 
     conn, _ = manifest.build(audio_root, db_path, store_path)
     if csv_path and os.path.exists(csv_path):

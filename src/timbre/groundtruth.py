@@ -1,25 +1,24 @@
 """Phase 1: exact brute-force search and the evaluation harness.
 
 This exists so Phase 2 can tell a working HNSW graph from a broken one. The
-spec's own risk note is that a naive neighbour-selection heuristic yields a
-graph that looks fine and searches badly, and this corpus has a weak geometric
-signal, so eyeballing results is not a check.
+spec's own risk note is that a naive neighbour-selection heuristic can yield a
+graph that looks plausible and searches badly. Exact neighbors test index
+accuracy; musical relevance requires a separate evaluation.
 
 Two ground-truth variants are cached per query, because one list cannot answer
 both questions we will ask of it:
 
   unfiltered      true nearest neighbours. The honest target for index recall --
                   an exact index must reproduce exactly this.
-  sibling-excluded  same-track windows removed. Measured on this corpus, 73% of
-                  top-10 neighbours are windows of the *query's own track* and
-                  39% of queries have an all-sibling top-10 (within-track
-                  similarity is 0.979). Scoring retrieval quality or the Phase 2
-                  aggregation rule against the unfiltered list would mostly be
-                  measuring "can it find the same song again", which is not the
-                  question.
+  sibling-excluded  same-track windows removed. Adjacent windows overlap by 90%,
+                  so unfiltered neighbors often contain the query's own track.
+                  This variant supports cross-track index evaluation. Neither
+                  cache contains human judgments of musical relevance.
 
 Both are exact; they differ only in candidate eligibility.
 """
+import hashlib
+import json
 import sqlite3
 
 import numpy as np
@@ -33,6 +32,37 @@ CHUNK_ROWS = 50_000
 N_QUERIES = 1_000
 TOP_K = 100
 SEED = 20260909
+
+
+def source_identity(db_path, store_path):
+    """Identify the vectors, embedding config, layout and query genre labels."""
+    from .verify import hash_store
+
+    with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as conn:
+        meta = dict(conn.execute("SELECT key, value FROM meta"))
+        tracks = conn.execute(
+            "SELECT track_id, row_start, n_windows, status, genre "
+            "FROM tracks ORDER BY track_id"
+        ).fetchall()
+    if any(t[3] == "pending" for t in tracks):
+        raise RuntimeError("ingest is incomplete; finish it before caching ground truth")
+    manifest = json.dumps({"meta": meta, "tracks": tracks}, sort_keys=True).encode()
+    return {
+        "source_store_sha256": hash_store(store_path),
+        "source_manifest_sha256": hashlib.sha256(manifest).hexdigest(),
+        "source_model": meta["model"],
+        "source_model_revision": meta["model_revision"],
+    }
+
+
+def load_groundtruth(cache_path, db_path, store_path):
+    """Load a cache only if it belongs to this completed store and manifest."""
+    identity = source_identity(db_path, store_path)
+    with np.load(cache_path, allow_pickle=False) as cache:
+        if any(key not in cache or str(cache[key]) != value
+               for key, value in identity.items()):
+            raise RuntimeError("ground-truth cache is stale; rebuild it for this store")
+        return {key: cache[key] for key in cache.files}
 
 
 def load_layout(db_path):
@@ -50,6 +80,8 @@ def load_layout(db_path):
     ).fetchall()
     conn.close()
 
+    if not rows:
+        return np.empty(0, dtype=np.int64), np.empty(0, dtype=np.int64)
     row_ids = np.concatenate([np.arange(rs, rs + nw) for _, rs, nw in rows])
     owner = np.concatenate([np.full(nw, tid) for tid, _, nw in rows])
     return row_ids, owner
@@ -69,9 +101,8 @@ def sample_queries(db_path, n=N_QUERIES, seed=SEED):
     two and says little about the other 14 genres. Allocation is proportional
     with a floor of 1, so Easy Listening (21 tracks) is still represented.
 
-    One window per sampled track, not several: sibling windows are 0.979 similar,
-    so a second window of the same track is close to a duplicate query and would
-    buy less than a different track for the same cost.
+    One window per sampled track, not several: adjacent windows overlap by 90%,
+    so additional queries from distinct tracks provide broader coverage.
     """
     conn = sqlite3.connect(db_path)
     by_genre = {}

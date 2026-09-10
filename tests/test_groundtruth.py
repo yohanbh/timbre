@@ -5,6 +5,7 @@
 3. cached neighbours reload identically
 4. recall_at_k returns 1.0 against the ground truth itself
 """
+import os
 import subprocess
 import sys
 
@@ -12,11 +13,12 @@ import numpy as np
 import pytest
 
 from timbre.groundtruth import (SEED, exact_topk, load_layout, owner_lookup,
-                                recall_at_k, sample_queries)
+                                recall_at_k, sample_queries, load_groundtruth)
 
-DB = "store/timbre.db"
-STORE = "store/vectors.npy"
-CACHE = "store/groundtruth.npz"
+STORE_DIR = os.environ.get("TIMBRE_TEST_STORE_DIR", "store")
+DB = os.path.join(STORE_DIR, "timbre.db")
+STORE = os.path.join(STORE_DIR, "vectors.npy")
+CACHE = os.path.join(STORE_DIR, "groundtruth.npz")
 
 
 @pytest.fixture(scope="module")
@@ -157,7 +159,8 @@ def test_cache_reloads_identically(tmp_path):
     r = _rebuild(out)
     assert r.returncode == 0, r.stderr
 
-    a, b = np.load(CACHE), np.load(out)
+    a = load_groundtruth(CACHE, DB, STORE)
+    b = load_groundtruth(out, DB, STORE)
     for key in ("query_rows", "gt_ids", "gt_ids_nosib"):
         assert np.array_equal(a[key], b[key]), f"{key} not reproducible"
     for key in ("gt_sims", "gt_sims_nosib"):

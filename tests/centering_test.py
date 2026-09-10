@@ -1,8 +1,8 @@
 """Does mean-centering improve retrieval quality? Raw vs centered cosine.
 
-CLAP's audio space is strongly anisotropic (mean pairwise cosine ~0.87, top
-principal component carries ~45% of variance). Mean-centering collapses that to
-~0.04. This measures whether the geometry change buys real retrieval quality,
+The original music checkpoint had mean pairwise cosine ~0.87. Re-run these
+measurements for each replacement checkpoint rather than assuming its geometry
+is unchanged. This measures whether centering improves genre agreement,
 using genre agreement as a proxy: what fraction of a track's top-k neighbours
 share its genre_top label.
 
@@ -12,8 +12,8 @@ Only a score clearly above 17.2% means the space is discriminating.
 
 Usage: PYTHONPATH=src python3 tests/centering_test.py [n_queries]
 """
+import argparse
 import sqlite3
-import sys
 
 import numpy as np
 
@@ -22,10 +22,10 @@ STORE = "store/vectors.npy"
 K = 10
 
 
-def load_tracks():
+def load_tracks(db=DB, store_path=STORE):
     """Track-level vectors (mean of each track's real windows) + genre labels."""
-    store = np.load(STORE, mmap_mode="r")
-    conn = sqlite3.connect(DB)
+    store = np.load(store_path, mmap_mode="r")
+    conn = sqlite3.connect(db)
     rows = conn.execute(
         "SELECT row_start, n_windows, genre, title, artist FROM tracks "
         "WHERE status='done' AND n_windows > 0 AND genre IS NOT NULL"
@@ -57,9 +57,14 @@ def genre_precision(V, genres, queries, k=K):
 
 
 def main():
-    n_queries = int(sys.argv[1]) if len(sys.argv) > 1 else 500
-    print(f"loading {STORE} ...")
-    V, genres, meta = load_tracks()
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("n_queries", type=int, nargs="?", default=500)
+    ap.add_argument("--db", default=DB)
+    ap.add_argument("--store", default=STORE)
+    a = ap.parse_args()
+    n_queries = a.n_queries
+    print(f"loading {a.store} ...")
+    V, genres, meta = load_tracks(a.db, a.store)
     print(f"tracks: {len(V)}, genres: {len(set(genres))}")
 
     raw = normalize(V.copy())

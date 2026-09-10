@@ -1,138 +1,102 @@
 # Next steps
 
-Phase 0 is complete and committed. This file is the pickup point.
+Phases 0 and 1 are implemented. The checkpoint migration is complete; Phase 2
+has not started. See [RETRIEVAL_DIAGNOSIS.md](RETRIEVAL_DIAGNOSIS.md) for the failure
+analysis, controlled comparison, and repair validation.
 
-## Where things stand
+## Current store
 
-**Phase 0 — DONE.** `store/vectors.npy` (1,075,200,128 bytes) holds 510,064 real
-CLAP vectors for 24,980 of 25,000 fma_medium tracks (15 corrupt, 5 too short).
-`store/timbre.db` has full metadata. The phase gate is met: killed mid-run at full
-scale, restarted, byte-identical store (`664ef3c0...`) and bookkeeping
-(`8f52a7a4...`).
+The active model is `laion/larger_clap_general`, pinned with its processor to
+`ada0c23a36c4e8582805bb38fec3905903f18b41`. The original music checkpoint collapsed
+unrelated text queries and produced weak audio retrieval.
 
-Rebuild from scratch with:
-
-```bash
-PYTHONPATH=src python3 -m timbre          # ~1.4 h, resumable, run again after any crash
-PYTHONPATH=src python3 -m timbre.verify   # hole integrity + norms + hashes
-```
-
-Note it is `python -m timbre`, **not** `python -m timbre.ingest` -- the entrypoint
-pins BLAS/OpenMP thread limits before numpy and torch are imported. Bypassing it
-costs ~6x throughput (see README).
-
-## Decisions already made (do not relitigate)
-
-| Decision | Why |
+| Artifact | Current state |
 |---|---|
-| Index the **raw** space, no mean-centering | Tested: +1.1% at n=2000, noise. Centering preserves ranking, and ranking is all retrieval uses. |
-| Strict 480,000-sample windows; accept 20 windows | 59% of clips are 29.9766 s (encoder artifact). Padding would add a near-duplicate of window 20 plus silence. |
-| No `segments` table | Derivable (`offset_s = row_id - row_start`), and a second table consistent with the mmap would break the atomic commit. |
-| 6 workers | GPU saturates at 91-97%; more only adds memory pressure on a 7.4 GiB box. |
-| Cache **both** unfiltered and sibling-excluded ground truth | Measured: 73.5% of top-10 are same-track siblings. One list cannot serve both index recall and retrieval quality. |
+| `store/vectors.npy` | 510,064 real vectors, 512-dimensional float32 |
+| `store/timbre.db` | 24,980 embedded tracks; 15 corrupt and five too short |
+| `store/groundtruth.npz` | Exact top-100 for 1,000 fixed, genre-stratified queries |
+| `store/legacy_music/` | Original vectors, database, cache and ingest log |
 
-## Phase 1 — exact search + evaluation harness — DONE
+New vector SHA-256:
+`67bfc23b7f26fe97c0751192be478ebfea50464462c334ed44cbc9af7026d3da`.
+The completed store passes integrity checks and all 26 non-slow tests. The three
+GPU tests passed during the rebuild, including determinism and crash-window
+recovery. The original full-scale SIGKILL experiment remains historical; it was
+not repeated on the entire replacement store.
 
-Built and committed. `store/groundtruth.npz` caches exact top-100 for a fixed
-1,000-query genre-stratified sample; any candidate index scores against it with
-one call to `recall_at_k`.
+On the same 2,000 queries against all 24,980 tracks, track-mean genre@10 rose
+from **31.5% to 70.0%** (chance 17.2%). Centering gives 70.2%, so raw embeddings
+remain the default. This is a relevance proxy, separate from human listening.
 
-```bash
-PYTHONPATH=src python3 -m timbre.build_groundtruth   # ~20 s, rebuilds the cache
-PYTHONPATH=src python3 -m pytest tests/test_groundtruth.py -q
-```
-
-**Two ground-truth variants are cached, not one.** Measured on this corpus,
-73.5% of unfiltered top-10 neighbours are windows of the query's own track and
-40.2% of queries have an all-sibling top-10 (within-track similarity 0.979).
-
-| Array | Use |
-|---|---|
-| `gt_ids` / `gt_sims` | True nearest neighbours. The honest target for **Phase 2 index recall** — an exact index must reproduce exactly this. |
-| `gt_ids_nosib` / `gt_sims_nosib` | Same-track windows removed. The target for **retrieval quality** and the aggregation experiment, where "found the same song again" is not the question. |
-
-The two overlap only 0.265 at k=10, so the choice is not cosmetic: scoring the
-aggregation rule against the unfiltered list would mostly measure self-recall.
-
-### What Phase 1 established
-
-- Query sample is reproducible from `SEED` alone; all 16 genres present, one
-  window per track (siblings are near-duplicate queries and buy less than a
-  different track for the same cost).
-- Reads go through `load_layout`, never a bare arange: the store is allocated at
-  21 windows/track but most fill 20, so the raw array has zero-filled holes.
-- Vectors are L2-normalized at ingest, so cosine is a plain dot product.
-- **Float32 reduction order is load-bearing here, in two ways.**
-  *Chunk width:* the same dot products at chunk=1500 vs 20000 differ on ~1.3% of
-  elements by up to 7.7e-07 in the raw BLAS output — the tile-decomposition
-  effect `embed.py` documents for batch composition. Ids survive this; sims do
-  not, so ids are the asserted contract across chunk widths.
-  *BLAS thread count:* worse. Rebuilding at 1, 2 or 8 threads changes the cached
-  **neighbour ids**, not just the sims, because this corpus packs neighbours at
-  0.979 similarity and near-ties reorder when the last bits move.
-
-  | BLAS threads | ids identical to cache | sims differing |
-  |---|---|---|
-  | 1 | no | 6042 |
-  | 2 | no | 5525 |
-  | **4 (pinned)** | **yes** | **0** |
-  | 8 | no | 5386 |
-
-  `build_groundtruth` therefore pins the count to 4 before numpy is imported,
-  the same discipline `__main__.py` applies for ingest, and records
-  `blas_threads` in the npz. Ground truth that depends on an ambient env var is
-  not ground truth.
-
-## Phase 2 — HNSW from scratch (1-1½ weekends)
-
-The actual project. Per spec: layer assignment by exponential decay, greedy
-descent, beam search at layer 0 with configurable `efSearch`, insertion with `M`
-bidirectional links and pruning, **the neighbour-selection heuristic** (not naive
-top-`M`), and graph serialization.
-
-**Done when:** recall@10 >= 0.95 against Phase 1 ground truth, plus a sweep over
-`M` x `efConstruction` x `efSearch` producing a recall/latency frontier.
-
-Budget real debugging time for the neighbour-selection heuristic. The weak
-geometric signal in this corpus (see README) means a bad graph will look
-plausible, so lean on ground truth early rather than eyeballing results.
-
-## Open experiments worth running
-
-These are cheap and each settles a spec open question:
-
-1. **Aggregation rule (open question #2).** Compare max-pool vs mean vs
-   count-in-top-k for turning 20 segment hits into one track score. The 0.979
-   within-track similarity suggests mean is too blunt; this is now an empirical
-   question with a clear setup.
-2. **Insertion order (open question #3).** FMA is ordered by track ID, which
-   correlates with album and genre, so a naive build inserts thousands of similar
-   vectors consecutively. Shuffle, rebuild, compare recall at equal parameters.
-3. **Text-query quality.** `tests/listen.py --text "..."` works but retrieval is
-   weak (~0.07 similarity, poorly separated). If Phase 4's demo matters, this
-   needs calibration -- possibly per-query score normalization.
-
-## Tools already built
+## Querying and validation
 
 ```bash
-# retrieval quality: raw vs centered, genre@10 against 17.2% chance
-PYTHONPATH=src python3 tests/centering_test.py 2000
-
-# listen to a query and its neighbours (needs ffplay)
+# Play the actual query and winning ten-second passage from each result.
 PYTHONPATH=src python3 tests/listen.py --track 2 -k 5 --play
-PYTHONPATH=src python3 tests/listen.py --text "smooth jazz saxophone" -k 5
+PYTHONPATH=src python3 tests/listen.py --track 10 --offset 10 -k 5 --play
+PYTHONPATH=src python3 tests/listen.py --text "sparse melancholy piano" -k 5 --play
 
-# determinism + crash-window regression tests
-python3 -m pytest tests/test_determinism.py -q          # fast subset
-python3 -m pytest tests/test_determinism.py -q -m slow  # includes GPU
+# Store integrity, then the complete test suite (includes GPU tests).
+USE_TF=0 PYTHONPATH=src python3 -m timbre.verify
+USE_TF=0 PYTHONPATH=src python3 -m pytest -q
 
-# full-scale kill-restart gate
-bash tests/kill_restart.sh <audio_root> <db> <store> 5
+# Reproduce full-corpus genre measurement.
+OPENBLAS_NUM_THREADS=1 PYTHONPATH=src python3 tests/centering_test.py 2000
+
+# Rebuild ground truth if the source vectors or manifest change.
+USE_TF=0 PYTHONPATH=src python3 -m timbre.build_groundtruth
 ```
 
-## Known gaps
+Listening searches a single segment and ranks distinct tracks by their best
+matching segment. It excludes the query's whole track and plays each winner at
+the matching offset. Text queries reject a store/model configuration mismatch.
+Ingest checks for text-embedding collapse before a long run.
 
-- Byte-identity is promised only within a fixed environment. Library versions and
-  the model commit SHA are recorded in the `meta` table and a resume against a
-  changed environment is refused -- but a torch or driver upgrade means the store
-  must be rebuilt to stay bit-comparable.
+Use `python -m timbre` for ingest: it sets thread limits before importing NumPy
+or PyTorch. A model change requires a fresh database and vector store; the
+existing resume guard correctly rejects mixed embedding configurations. There
+is no pending work in the active store.
+
+## Ground truth for Phase 2
+
+Use the validated loader before scoring an index:
+
+```python
+from timbre.groundtruth import load_groundtruth, recall_at_k
+
+truth = load_groundtruth("store/groundtruth.npz", "store/timbre.db", "store/vectors.npy")
+# recall_at_k(candidate_ids, truth["gt_ids"], 10)
+```
+
+The cache records hashes of vectors and the manifest, plus the model revision.
+Loading rejects stale caches; building rejects incomplete ingests. Four BLAS
+threads are pinned when building the cache to fix float32 reduction behavior.
+
+| Arrays | Purpose |
+|---|---|
+| `gt_ids`, `gt_sims` | Geometric index recall, excluding the query row itself |
+| `gt_ids_nosib`, `gt_sims_nosib` | Cross-track geometric recall, excluding all query-track windows |
+
+With the replacement model, **94.92%** of unfiltered top-10 hits are same-track
+siblings, and **81.5%** of queries have an all-sibling top-10. Adjacent windows
+overlap by 90%; cross-track relevance must be evaluated separately. Neither
+cache contains human judgments of musical similarity.
+
+All candidate row IDs must come from `load_layout`; the mmap reserves 21 rows
+per track but most tracks fill 20, leaving zero-filled holes. Segment offsets
+are derivable from row IDs and each track's row start.
+
+## Phase 2 — HNSW from scratch
+
+Implement exponential layer assignment, greedy descent, beam search at layer 0,
+insertion with bidirectional links and pruning, the neighbor-selection heuristic,
+and graph serialization. Do not substitute a third-party index in the serving path.
+
+Done when recall@10 is at least 0.95 against Phase 1 ground truth, with an
+`M × efConstruction × efSearch` sweep showing the recall/latency frontier.
+
+Re-measure geometric properties on the replacement embeddings before drawing
+conclusions from the old checkpoint's anisotropy. Still-open experiments include
+max versus mean versus count aggregation, shuffled insertion order, and human
+evaluation of text/audio retrieval. The user's concrete listening examples are
+tracks 2, 3, and 10, including the fifth neighbor of track 10.

@@ -66,7 +66,8 @@ Start on `fma_medium` (25,000 tracks, 22 GiB), **not** the full corpus.
 
 - Decode audio, resample to 48 kHz mono
 - Segment into 10 s windows at 1 s hop
-- Embed with `laion/larger_clap_music`
+- Embed with `laion/larger_clap_general`, pinned to a validated revision (the
+  original music checkpoint was replaced after the retrieval diagnosis).
 - Write vectors to a memory-mapped `.npy`, metadata to SQLite (track id, title, artist, genre, segment offset)
 
 Make it **resumable from the first line of code**. Embedding 25K tracks takes hours and the job
@@ -184,7 +185,7 @@ optimizations account for the difference.
 | Component | Choice | Notes |
 |---|---|---|
 | Corpus | [FMA](https://github.com/mdeff/fma) | medium 25K / 22 GiB → large 106,574 / 93 GiB; CC-BY metadata |
-| Embeddings | [`laion/larger_clap_music`](https://huggingface.co/laion/larger_clap_music) | Apache 2.0, joint audio+text space, 48 kHz input |
+| Embeddings | [`laion/larger_clap_general`](https://huggingface.co/laion/larger_clap_general) | Apache 2.0, joint audio+text space, 48 kHz input |
 | Embedding compute | Colab or Kaggle free tier | Kaggle gives 30 GPU-hours/week; checkpoint every batch |
 | Index | Ours — Python, then C++ | pybind11 for the hot path in Phase 3 |
 | Vector store | memory-mapped `.npy` | mmap is what makes the memory-cliff experiment possible |

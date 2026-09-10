@@ -7,7 +7,7 @@ it byte for byte; that is the Phase 1 analogue of the Phase 0 gate.
 
 Thread count is pinned here, before numpy is imported, for the same reason
 __main__.py pins it before torch: BLAS sizes its pool at import time, so setting
-it later has no effect. It matters more than it looks. Measured on this corpus,
+it later has no effect. It matters more than it looks. On the original checkpoint,
 the cached top-100 is bit-identical at BLAS_THREADS=4 but differs at 1 or 2
 threads -- and not only in the similarity values: *neighbour ids* change too,
 because a different reduction order moves the last bits and this corpus packs
@@ -28,11 +28,12 @@ import time  # noqa: E402
 import numpy as np  # noqa: E402
 
 from .groundtruth import (N_QUERIES, SEED, TOP_K, exact_topk,  # noqa: E402
-                          load_layout, owner_lookup, sample_queries)
+                          load_layout, owner_lookup, sample_queries, source_identity)
 
 
 def main(db="store/timbre.db", store_path="store/vectors.npy",
          out="store/groundtruth.npz"):
+    identity = source_identity(db, store_path)
     row_ids, owner = load_layout(db)
     lut = owner_lookup(row_ids, owner)
     store = np.load(store_path, mmap_mode="r")
@@ -55,7 +56,7 @@ def main(db="store/timbre.db", store_path="store/vectors.npy",
 
     np.savez(out, query_rows=q_rows, query_tracks=q_tracks,
              query_genres=np.asarray(q_genres, dtype=str), seed=SEED,
-             blas_threads=int(BLAS_THREADS), **results)
+             blas_threads=int(BLAS_THREADS), **identity, **results)
     print(f"wrote {out}")
     return 0
 
