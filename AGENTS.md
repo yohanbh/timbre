@@ -63,3 +63,38 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+
+## Completed: FMA large vectorization
+
+FMA large ingestion and final verification finished successfully on 2026-09-10
+at 22:23 EDT. All 106,574 tracks were processed: 105,884 embedded, 162 failed,
+and 528 too short, with zero pending. The store contains 2,144,867 populated
+512-dimensional vectors. Shape, dtype, zero padding and vector norms passed;
+store/database hashes are saved in `store/large/completion.json`. SQLite quick
+check also passed after completion. The service exited successfully; do not
+restart ingestion unnecessarily. Large-store ground truth is also complete (see below); index benchmarks
+remain subsequent work. Windows disk compaction completed successfully.
+
+## Completed: Windows disk space reclamation
+
+Offline compaction completed on 2026-09-10 at 22:39 EDT, reclaiming
+118,753,329,152 bytes (110.60 GiB). Windows reported 206.42 GiB free afterward.
+The result and DiskPart success output were verified in
+`C:\Users\bhojw\timbre-maintenance`; the current VHD size confirms the reduction.
+After reopening WSL, SQLite quick check passed and ingestion counts still match
+`store/large/completion.json`, with zero pending. The obsolete
+`timbre-reclaim-reminder.service` is disabled and stopped. Ingestion was not restarted.
+
+## Completed: FMA large ground truth
+
+On 2026-09-11, `store/large/groundtruth.npz` was built and validated for 1,000
+fixed queries and top-100 neighbors over 2,144,867 populated vectors. Both
+self-excluded and query-track-excluded variants reproduce byte-for-byte.
+`store/large/index_groundtruth.npz` freezes 2,143,867 index candidates, excluding
+all 1,000 query rows, with a separate exact top-100 oracle. Source hashes,
+query sampling, membership, exclusions and score ordering passed validation;
+three independent per-query full scans also checked the index oracle.
+Reports and hashes are in `docs/large_groundtruth_results.json` and the
+`store/large/*groundtruth_validation.json` files. No large graph has been built.
+Next: use the held-out oracle to build and benchmark the large C++ HNSW index;
+do not re-vectorize or use the full-store oracle to score a held-out graph.

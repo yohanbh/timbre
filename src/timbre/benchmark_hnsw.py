@@ -63,30 +63,34 @@ def frontier(points):
     )]
 
 
-def measure(index, queries, truth, ef_search):
+def measure(index, queries, truth, ef_search, k):
     # Warm caches without including model load, construction or disk IO in timing.
     for query in queries[:10]:
-        index.search(query, k=10, ef_search=ef_search)
+        index.search(query, k=k, ef_search=ef_search)
     ids, milliseconds, evaluations = [], [], []
     for query in queries:
         started = time.perf_counter()
-        found, _ = index.search(query, k=10, ef_search=ef_search)
+        found, _ = index.search(query, k=k, ef_search=ef_search)
         milliseconds.append((time.perf_counter() - started) * 1000)
         evaluations.append(index.distance_evaluations)
-        if len(found) != 10:
-            raise RuntimeError("graph returned fewer than ten neighbors")
+        if len(found) != k:
+            raise RuntimeError(f"graph returned fewer than requested neighbors: {len(found)} < {k}")
         ids.append(found)
     ids = np.array(ids)
-    return {
+    point = {
         "ef_search": ef_search,
         "recall_at_1": recall_at_k(ids, truth, 1),
-        "recall_at_10": recall_at_k(ids, truth, 10),
+        "recall_at_10": recall_at_k(ids, truth, min(10, k)),
         "p50_ms": float(np.percentile(milliseconds, 50)),
         "p95_ms": float(np.percentile(milliseconds, 95)),
         "p99_ms": float(np.percentile(milliseconds, 99)),
         "queries_per_second": float(1000 / np.mean(milliseconds)),
         "mean_distance_evaluations": float(np.mean(evaluations)),
+        "k": k,
     }
+    if k >= 100 and truth.shape[1] >= 100:
+        point["recall_at_100"] = recall_at_k(ids, truth, 100)
+    return point
 
 
 def main():
@@ -98,14 +102,17 @@ def main():
     ap.add_argument("--vectors", type=int, default=125_000)
     ap.add_argument("--queries", type=int, default=1000)
     ap.add_argument("--seed", type=int, default=20260909)
+    ap.add_argument("--k", type=int, default=10,
+                    help="neighbors returned by each query and for recall scoring")
     ap.add_argument("--m", type=int, nargs="+", default=[8, 16])
     ap.add_argument("--ef-construction", type=int, nargs="+", default=[80, 160])
     ap.add_argument("--ef-search", type=int, nargs="+", default=[16, 32, 64, 128, 256])
     ap.add_argument("--order", choices=["shuffled", "track"], default="shuffled")
     a = ap.parse_args()
     if (a.vectors < 100 or a.queries < 1 or min(a.m) < 2 or
-            min(a.ef_construction) < max(a.m) or min(a.ef_search) < 10):
-        ap.error("require vectors >= 100, queries >= 1, M >= 2, efConstruction >= M, efSearch >= 10")
+            min(a.ef_construction) < max(a.m) or min(a.ef_search) < a.k or a.k < 10):
+        ap.error("require vectors >= 100, queries >= 1, M >= 2, efConstruction >= M, "
+                 "k >= 10, and efSearch >= k")
 
     phase1 = load_groundtruth(a.groundtruth, a.db, a.store)
     if a.queries > len(phase1["query_rows"]):
@@ -120,11 +127,11 @@ def main():
     order = np.arange(len(vectors))
     if a.order == "shuffled":
         order = np.random.default_rng(a.seed + 1).permutation(order)
-    report = {"vectors": len(vectors), "queries": len(queries), "dimension": vectors.shape[1],
-              "seed": a.seed, "order": a.order, "blas_threads": 1,
-              "numpy_version": np.__version__, "python_version": platform.python_version(),
-              "source_model": str(phase1["source_model"]),
-              "source_store_sha256": str(phase1["source_store_sha256"]), "points": []}
+        report = {"vectors": len(vectors), "queries": len(queries), "dimension": vectors.shape[1],
+                  "seed": a.seed, "order": a.order, "blas_threads": 1,
+                  "numpy_version": np.__version__, "python_version": platform.python_version(),
+                  "source_model": str(phase1["source_model"]),
+                  "source_store_sha256": str(phase1["source_store_sha256"]), "points": []}
 
     for M in a.m:
         for ef_construction in a.ef_construction:
@@ -158,10 +165,15 @@ def main():
             for ef_search in a.ef_search:
                 point = {"M": M, "ef_construction": ef_construction, **info,
                          "graph_bytes": path.stat().st_size,
-                         **measure(index, queries, truth, ef_search)}
+                         **measure(index, queries, truth, ef_search, a.k)}
                 report["points"].append(point)
-                print(f"  efSearch={ef_search:3d}: recall@10={point['recall_at_10']:.4f} "
-                      f"p50={point['p50_ms']:.3f}ms p95={point['p95_ms']:.3f}ms", flush=True)
+                recall_100 = (
+                    f", recall@100={point['recall_at_100']:.4f}"
+                    if "recall_at_100" in point else ""
+                )
+                print(f"  efSearch={ef_search:3d}: recall@10={point['recall_at_10']:.4f}"
+                      f"{recall_100} p50={point['p50_ms']:.3f}ms p95={point['p95_ms']:.3f}ms",
+                      flush=True)
                 report["frontier"] = frontier(report["points"])
                 report["passes_recall_gate"] = any(p["recall_at_10"] >= 0.95 for p in report["points"])
                 # Linux ru_maxrss is KiB; this is the whole benchmark process,

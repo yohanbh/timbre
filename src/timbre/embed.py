@@ -6,8 +6,6 @@ bits (measured maxdiff ~5e-08), because batched GEMM kernels pick different tile
 decompositions. So one track's 21 windows are always embedded as one batch.
 """
 import numpy as np
-import torch
-from transformers import ClapModel, ClapProcessor
 
 MODEL_ID = "laion/larger_clap_general"
 MODEL_REVISION = "ada0c23a36c4e8582805bb38fec3905903f18b41"
@@ -34,6 +32,8 @@ def assert_window_len(window):
 
 def set_determinism():
     """Pin every knob that changes output bits. Call before loading the model."""
+    import torch
+
     torch.backends.cuda.matmul.allow_tf32 = False
     torch.backends.cudnn.allow_tf32 = False
     torch.set_num_threads(1)
@@ -41,6 +41,9 @@ def set_determinism():
 
 class Embedder:
     def __init__(self, device="cuda"):
+        import torch
+        from transformers import ClapModel, ClapProcessor
+
         set_determinism()
         if device == "cuda" and not torch.cuda.is_available():
             raise RuntimeError("CUDA unavailable; refusing to fall back to CPU (would change bits)")
@@ -59,6 +62,8 @@ class Embedder:
 
     def embed_features(self, feats):
         """Embed pre-extracted features on GPU. One call per track."""
+        import torch
+
         feats = {k: v.to(self.device) for k, v in feats.items()}
         with torch.inference_mode():
             out = self.model.get_audio_features(**feats)
@@ -68,6 +73,8 @@ class Embedder:
         return self.embed_features(self.features(windows))
 
     def embed_text(self, texts):
+        import torch
+
         feats = self.processor(text=list(texts), padding=True, truncation=True,
                                return_tensors="pt")
         with torch.inference_mode():
@@ -103,6 +110,7 @@ class Embedder:
 
 
 def versions():
+    import torch
     import transformers
     return {
         "torch": torch.__version__,

@@ -3,3 +3,7 @@ store/
 __pycache__/
 *.pyc
 .venv/
+build/
+*.egg-info/
+*.so
+logs/

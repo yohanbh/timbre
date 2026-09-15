@@ -54,6 +54,42 @@ and [measured results](docs/hnsw_medium_results.json). Most exact neighbors at
 this size are overlapping windows from the query's own track; musical relevance
 requires separate evaluation.
 
+## Phase 3 — native search and construction
+
+The hand-written C++ distance and search loop is implemented behind pybind11.
+On the same saved graphs and 1,000 held-out queries, at `efSearch=64`:
+
+| Indexed segments | Python median | C++ median | Speedup | Recall@10, both |
+|---|---|---|---|---|
+| 125,000 | 0.886 ms | 0.204 ms | 4.35× | 99.43% |
+| 509,064 | 0.879 ms | 0.193 ms | 4.55× | 99.85% |
+
+These are fresh paired measurements on one CPU thread, with three passes per
+backend. Every top-10 neighbor set matched across all five tested efSearch
+settings; three medium-store queries differed in result order. Native medium
+p95 at `efSearch=64` was **0.267 ms**. That query-only experiment reused saved graphs.
+
+C++ graph construction is also implemented, including neighbor selection,
+reciprocal insertion, pruning and deterministic checkpoint continuation. Fresh
+builds with identical order, node levels and checkpoint frequency measured:
+
+| Indexed segments | Python build | C++ build | Speedup | Recall@10 at efSearch=64, both |
+|---|---|---|---|---|
+| 125,000 | 195.44 s | 36.99 s | 5.28× | 99.43% |
+| 509,064 | 826.95 s | 170.76 s | 4.84× | 99.85% |
+
+Total build time includes initialization and checkpoint/final saves. Recall was
+unchanged at all five tested search settings; reloading both native graphs
+reproduced the efSearch=64 results. These are single fresh builds per backend.
+
+See [implementation, setup and full measurements](PHASE3.md).
+Phase 3 remains in progress. FMA large download, extraction, vectorization and
+final verification completed on 2026-09-10. The large store contains 2,144,867
+populated vectors from 105,884 embedded tracks; 162 failed and 528 were too short,
+with zero pending. No re-vectorization is needed for the index benchmarks.
+See [the large-corpus run and progress commands](FMA_LARGE.md). Large-scale index
+benchmarks, memory-limit experiments and locality reordering are still ahead.
+
 ## Retrieval and validation
 
 ```bash

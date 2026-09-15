@@ -1,0 +1,74 @@
+{
+  "phase1_groundtruth": {
+    "validated_at": "2026-09-11T21:01:11.097842+00:00",
+    "queries": 1000,
+    "tracks": 105884,
+    "populated_vectors": 2144867,
+    "top_k": 100,
+    "blas_threads": 4,
+    "seed": 20260909,
+    "variants": [
+      "self_excluded",
+      "query_track_excluded"
+    ],
+    "byte_identical_rebuild": true,
+    "groundtruth_sha256": "9e3bbb54bfbe36740c59924904dd97a74da5a7b1824f99bb429dd0c19c2af407",
+    "source_store_sha256": "cd69ad97883b5af7e546b7d127227e32f09cabde062e82850c6c0a6fac02d595",
+    "source_db_sha256": "9d444dc469dfc534611e652dba0671d2010fcc9f82e702e7740544c6be8edd77",
+    "membership_exclusions_ordering_finite_scores_ok": true,
+    "query_sampling_reproduced": true,
+    "genre_query_counts": {
+      "(none)": 535,
+      "Blues": 1,
+      "Classical": 12,
+      "Country": 2,
+      "Easy Listening": 1,
+      "Electronic": 87,
+      "Experimental": 99,
+      "Folk": 26,
+      "Hip-Hop": 33,
+      "Instrumental": 20,
+      "International": 13,
+      "Jazz": 5,
+      "Old-Time / Historic": 5,
+      "Pop": 22,
+      "Rock": 133,
+      "Soul-RnB": 2,
+      "Spoken": 4
+    }
+  },
+  "held_out_index_oracle": {
+    "validated_at": "2026-09-11T21:02:21.700684+00:00",
+    "candidate_vectors": 2143867,
+    "held_out_queries": 1000,
+    "top_k": 100,
+    "seed": 20260909,
+    "blas_threads": 1,
+    "build_seconds": 59.04997294699996,
+    "all_query_rows_excluded": true,
+    "populated_rows_only": true,
+    "independent_full_scan_query_indices": [
+      0,
+      499,
+      999
+    ],
+    "independent_score_tolerance": 1e-06,
+    "oracle_sha256": "e90117be0ed08332c05cde37866dc781a18c02c2c29d0d31617f7f04f57807b9",
+    "source_store_sha256": "cd69ad97883b5af7e546b7d127227e32f09cabde062e82850c6c0a6fac02d595",
+    "graph_built": false
+  },
+  "phase1_first_build_seconds": {
+    "self_excluded": 37.3,
+    "query_track_excluded": 27.4
+  },
+  "phase1_repeat_build_seconds": {
+    "self_excluded": 31.6,
+    "query_track_excluded": 32.1
+  },
+  "timing_note": "Search-pass timings exclude source hashing, loading and validation; index build_seconds covers oracle preparation only.",
+  "artifacts": {
+    "phase1": "store/large/groundtruth.npz",
+    "index_oracle": "store/large/index_groundtruth.npz"
+  },
+  "index_benchmark_completed": false
+}

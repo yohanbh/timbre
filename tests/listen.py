@@ -16,6 +16,7 @@ import argparse
 import shlex
 import sqlite3
 import subprocess
+import time
 
 import numpy as np
 
@@ -48,10 +49,12 @@ def main():
 
     # Read candidate IDs first so metadata includes all of them even while an
     # ingest is adding completed tracks. Existing completed rows are immutable.
+    print("Loading track catalog...", flush=True)
     row_ids, owner = load_layout(a.db)
     with sqlite3.connect(f"file:{a.db}?mode=ro", uri=True) as conn:
         if a.text:
             # Audio queries reuse stored vectors; text must use the same model.
+            print("Checking text model environment...", flush=True)
             try:
                 check_versions(conn)
             except RuntimeError as error:
@@ -73,6 +76,7 @@ def main():
 
     query_track = None
     if a.text:
+        print("Loading text model and embedding query...", flush=True)
         embedder = Embedder()
         embedder.check_text_separation()
         q = embedder.embed_text([a.text])[0]
@@ -92,9 +96,12 @@ def main():
               f"(track {t[0]}, {a.offset}–{a.offset + 10}s)", flush=True)
         show_audio(t, a.offset)
 
+    print(f"Searching {len(row_ids):,} vectors (exact scan)...", flush=True)
+    started = time.monotonic()
     ids, hit_rows, scores = exact_track_topk(
         store, q, row_ids, owner, k=a.k, exclude_track=query_track
     )
+    print(f"Search finished in {time.monotonic() - started:.1f}s.", flush=True)
     for rank, (tid, row, score) in enumerate(zip(ids, hit_rows, scores), 1):
         t = tracks[tid]
         offset = int(row - t[1]) * HOP_SECONDS

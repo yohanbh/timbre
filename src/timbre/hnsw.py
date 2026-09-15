@@ -15,21 +15,36 @@ import numpy as np
 
 
 class HNSW:
-    def __init__(self, vectors, ids=None, M=16, ef_construction=100, seed=0):
-        self.vectors = np.asarray(vectors, dtype=np.float32)
-        if self.vectors.ndim != 2 or self.vectors.shape[1] == 0:
+    @staticmethod
+    def _validated_vectors(vectors):
+        vectors = np.asarray(vectors, dtype=np.float32)
+        if vectors.ndim != 2 or vectors.shape[1] == 0:
             raise ValueError("vectors must be a matrix with a nonzero dimension")
-        if not np.isfinite(self.vectors).all() or not np.allclose(
-            np.linalg.norm(self.vectors, axis=1), 1, atol=1e-4
-        ):
-            raise ValueError("vectors must be finite and L2-normalized")
-        n = len(self.vectors)
-        self.ids = np.arange(n, dtype=np.int64) if ids is None else np.asarray(ids, dtype=np.int64)
-        if self.ids.shape != (n,) or np.unique(self.ids).size != n:
+        for start in range(0, len(vectors), 8192):
+            chunk = vectors[start:start + 8192]
+            if (not np.isfinite(chunk).all() or
+                    not np.allclose(np.linalg.norm(chunk, axis=1), 1, atol=1e-4)):
+                raise ValueError("vectors must be finite and L2-normalized")
+        return vectors
+
+    @staticmethod
+    def _validated_ids(ids, n):
+        ids = np.arange(n, dtype=np.int64) if ids is None else np.asarray(ids, dtype=np.int64)
+        if ids.shape != (n,) or np.unique(ids).size != n:
             raise ValueError("ids must contain one unique integer per vector")
+        return ids
+
+    @staticmethod
+    def _validated_configuration(M, ef_construction):
         if M < 2 or ef_construction < M:
             raise ValueError("require M >= 2 and ef_construction >= M")
-        self.M, self.ef_construction = int(M), int(ef_construction)
+        return int(M), int(ef_construction)
+
+    def __init__(self, vectors, ids=None, M=16, ef_construction=100, seed=0):
+        self.vectors = self._validated_vectors(vectors)
+        n = len(self.vectors)
+        self.ids = self._validated_ids(ids, n)
+        self.M, self.ef_construction = self._validated_configuration(M, ef_construction)
         self.rng = np.random.default_rng(seed)
         self.levels = np.full(n, -1, dtype=np.int16)
         self.base = [[] for _ in range(n)]
