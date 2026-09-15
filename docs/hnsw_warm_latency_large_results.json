@@ -1,0 +1,63 @@
+{
+  "graph": "store/hnsw_construction_large/cpp_direct",
+  "vectors": 2143867,
+  "queries": 1000,
+  "M": 8,
+  "ef_construction": 80,
+  "k": 10,
+  "protocol": "interleaved-ef, warm page cache",
+  "direct_load_seconds": 0.37232844499976636,
+  "direct_load_rss_gib": 0.096832275390625,
+  "graph_bytes_on_disk": 4537964181,
+  "blas_threads": 1,
+  "python_version": "3.10.12",
+  "compiler": "11.4.0",
+  "peak_rss_gib": 4.237586975097656,
+  "points": [
+    {
+      "ef_search": 16,
+      "recall_at_10": 0.9724999999999999,
+      "mean_distance_evaluations": 244.826,
+      "p50_ms": 0.08135949997267744,
+      "p95_ms": 0.17772005003280356,
+      "p99_ms": 0.22992544018052283,
+      "queries_per_second": 11503.480913182208
+    },
+    {
+      "ef_search": 32,
+      "recall_at_10": 0.9902,
+      "mean_distance_evaluations": 347.589,
+      "p50_ms": 0.07980149985087337,
+      "p95_ms": 0.14469900002040958,
+      "p99_ms": 0.23871272023825438,
+      "queries_per_second": 11467.321670824227
+    },
+    {
+      "ef_search": 64,
+      "recall_at_10": 0.9958,
+      "mean_distance_evaluations": 547.393,
+      "p50_ms": 0.14475450007012114,
+      "p95_ms": 0.24909000019306404,
+      "p99_ms": 0.3614544102447325,
+      "queries_per_second": 6457.090431637157
+    },
+    {
+      "ef_search": 128,
+      "recall_at_10": 0.9984999999999999,
+      "mean_distance_evaluations": 933.205,
+      "p50_ms": 0.3957760000048438,
+      "p95_ms": 0.8798872498573469,
+      "p99_ms": 1.239563310300582,
+      "queries_per_second": 2169.544679433389
+    },
+    {
+      "ef_search": 256,
+      "recall_at_10": 0.9992000000000001,
+      "mean_distance_evaluations": 1663.531,
+      "p50_ms": 1.1786125000980974,
+      "p95_ms": 2.56175070021527,
+      "p99_ms": 3.4105363201706496,
+      "queries_per_second": 759.0922392668489
+    }
+  ]
+}

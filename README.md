@@ -92,22 +92,36 @@ See [the large-corpus run and progress commands](FMA_LARGE.md).
 The large native graph is built and **passes the recall gate on all 2,143,867
 indexed segments**, with 1,000 held-out queries at `M=8, efConstruction=80`:
 
-| efSearch | recall@10 | mean distance evals |
-|---|---|---|
-| 16 | 97.25% | 245 |
-| 32 | 99.02% | 348 |
-| 64 | **99.58%** | 547 |
-| 128 | 99.85% | 933 |
-| 256 | 99.92% | 1664 |
+| efSearch | recall@10 | mean distance evals | p50 | p95 |
+|---|---|---|---|---|
+| 16 | 97.25% | 245 | 0.081 ms | 0.178 ms |
+| 32 | 99.02% | 348 | 0.080 ms | 0.145 ms |
+| 64 | **99.58%** | 547 | **0.145 ms** | 0.249 ms |
+| 128 | 99.85% | 933 | 0.396 ms | 0.880 ms |
+| 256 | 99.92% | 1664 | 1.179 ms | 2.562 ms |
 
 Recall holds across a 4.2x corpus increase: 99.85% on full-medium versus 99.58%
-here, both at efSearch=64. Latencies from this sweep are deliberately omitted.
-They were measured under memory pressure — 4.93 GiB peak RSS against 7.4 GiB of
-RAM, over a memory-mapped 4 GiB vector file — and are non-monotonic in efSearch
-even though distance evaluations rise monotonically. Recall is unaffected, being
-an exact set comparison against the held-out oracle. Memory-limit experiments
-and locality reordering are still ahead, and direct memory-mapped loading is the
-prerequisite for a usable large-scale latency curve.
+here, both at efSearch=64 — at 0.145 ms median against full-medium's 0.193 ms.
+
+The graph is mapped with `NativeHNSW.load_directory`, which costs **0.097 GiB
+RSS and 0.37 seconds** for 4,537,964,181 bytes on disk; arrays stay memory-mapped
+and no Python adjacency is expanded. Latencies are measured with efSearch
+settings interleaved per query against a warm page cache, so no setting absorbs
+another's paging cost; recall and distance evaluations match the build-time
+sweep exactly. An earlier ascending single-pass sweep against a cold cache
+produced non-monotonic timings and is recorded as an artifact, not a result.
+
+Page-cache state dominates latency and leaves recall untouched. At efSearch=64,
+a cold start costs **171x at p99** (173.749 ms versus 1.015 ms, with 1,022 major
+faults versus zero) at an unchanged 99.58% recall@10. Two negative results: a
+`RLIMIT_AS` cap cannot express this workload, since address space must cover the
+whole 4.09 GiB mapping and caps at or below 4 GiB fail outright; and
+`madvise(MADV_DONTNEED)` does not emulate cold storage, returning every page
+from page cache with zero major faults.
+
+See [memory and loading measurements](docs/hnsw_memory_large_results.json) and
+[the warm latency curve](docs/hnsw_warm_latency_large_results.json). Locality
+reordering, multithreaded search and library baselines are still ahead.
 
 ## Retrieval and validation
 

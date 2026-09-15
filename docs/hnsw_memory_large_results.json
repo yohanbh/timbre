@@ -1,0 +1,61 @@
+{
+  "graph": "store/hnsw_construction_large/cpp_direct",
+  "vectors": 2143867,
+  "queries": 1000,
+  "M": 8,
+  "ef_construction": 80,
+  "ef_search": 64,
+  "k": 10,
+  "blas_threads": 1,
+  "host_ram_gib": 7.4,
+  "graph_bytes_on_disk": 4537964181,
+  "notes": [
+    "Page-cache state is the independent variable; recall is an exact set comparison against store/large/index_groundtruth.npz and does not vary with it.",
+    "Cold state evicts every direct-graph file with posix_fadvise(POSIX_FADV_DONTNEED) before the timed run; no root or drop_caches required.",
+    "RLIMIT_AS is not a usable cap for this workload: it limits address space, so mapping the 4.09 GiB vector file fails at caps of 4 GiB and below with OSError errno 12 regardless of resident pages.",
+    "madvise(MADV_DONTNEED) on the mapped vector range returned pages from page cache with zero major faults, so it does not emulate cold storage."
+  ],
+  "direct_loading": {
+    "load_seconds": 0.37232844499976636,
+    "load_rss_gib": 0.096832275390625,
+    "arrays_memory_mapped": true,
+    "python_adjacency_expanded": false
+  },
+  "page_cache_states": [
+    {
+      "state": "cold",
+      "recall_at_10": 0.9958,
+      "p50_ms": 1.5873879999617202,
+      "p95_ms": 17.257874900269584,
+      "p99_ms": 173.74909623998974,
+      "minor_faults": 62175,
+      "major_faults": 1022,
+      "peak_rss_gib": 3.9968185424804688
+    },
+    {
+      "state": "warm",
+      "recall_at_10": 0.9958,
+      "p50_ms": 0.3773010000713839,
+      "p95_ms": 0.8089155498737455,
+      "p99_ms": 1.0145983499614883,
+      "minor_faults": 31736,
+      "major_faults": 0,
+      "peak_rss_gib": 3.9975852966308594
+    }
+  ],
+  "resident_vector_caps": [
+    {"vectors_resident_cap_gib": 4.0, "evicted_bytes": 95670272, "recall_at_10": 0.9958, "p50_ms": 0.5008660000385134, "p95_ms": 0.9691999998722167, "p99_ms": 1.1738935097582723, "major_faults": 0},
+    {"vectors_resident_cap_gib": 2.0, "evicted_bytes": 2243153920, "recall_at_10": 0.9958, "p50_ms": 0.40598550003778655, "p95_ms": 0.8754693499440689, "p99_ms": 1.1178986599225025, "major_faults": 0},
+    {"vectors_resident_cap_gib": 1.0, "evicted_bytes": 3316895744, "recall_at_10": 0.9958, "p50_ms": 0.3632094999375113, "p95_ms": 0.7494102000464408, "p99_ms": 0.9272275899638771, "major_faults": 0},
+    {"vectors_resident_cap_gib": 0.5, "evicted_bytes": 3853766656, "recall_at_10": 0.9958, "p50_ms": 0.4241700000875426, "p95_ms": 0.7888276499215863, "p99_ms": 0.9795333098509218, "major_faults": 0},
+    {"vectors_resident_cap_gib": 0.25, "evicted_bytes": 4122202112, "recall_at_10": 0.9958, "p50_ms": 0.41676600017126475, "p95_ms": 0.9505727498662963, "p99_ms": 1.2510235099261988, "major_faults": 0}
+  ],
+  "address_space_caps": [
+    {"cap_gib": 0, "status": "ok", "recall_at_10": 0.9958, "p50_ms": 1.2627015000816755, "p95_ms": 2.9306049498700304, "p99_ms": 4.384107719720305, "major_faults": 58},
+    {"cap_gib": 6, "status": "ok", "recall_at_10": 0.9958, "p50_ms": 0.38899400010450336, "p95_ms": 0.8123736500010637, "p99_ms": 1.0644102299056613, "major_faults": 7},
+    {"cap_gib": 4, "status": "failed", "error": "OSError errno 12 mapping vectors.npy"},
+    {"cap_gib": 3, "status": "failed", "error": "OSError errno 12 mapping vectors.npy"},
+    {"cap_gib": 2, "status": "failed", "error": "OSError errno 12 mapping vectors.npy"},
+    {"cap_gib": 1, "status": "failed", "error": "OSError errno 12 mapping vectors.npy"}
+  ]
+}

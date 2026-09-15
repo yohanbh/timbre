@@ -14,12 +14,13 @@ See [FMA_LARGE.md](FMA_LARGE.md).
 
 The large native graph is now built and passes the recall gate on all 2,143,867
 indexed segments — 99.58% recall@10 at efSearch=64, rising to 99.92% at
-efSearch=256. Its latency sweep is contaminated by memory pressure and is not a
-usable measurement; see
-[the large-corpus construction results](NEXT_STEPS.md#large-native-construction--complete-2026-09-14).
-Direct memory-mapped loading, enforced memory caps and locality reordering
-remain, and the first two are prerequisites for a clean large-scale latency
-curve.
+efSearch=256. Direct memory-mapped loading and the memory-limit experiments are
+also complete: `load_directory` maps the 4.54 GB graph in 0.37 s for 0.097 GiB
+RSS, and the warm interleaved latency curve is monotonic at 0.145 ms median for
+efSearch=64. Page-cache state costs 171x at p99 cold while leaving recall
+unchanged. See
+[the large-corpus results](NEXT_STEPS.md#large-native-construction--complete-2026-09-14).
+Locality reordering, multithreaded search and third-party baselines remain.
 
 ## Implementation
 
@@ -31,8 +32,16 @@ tie breaking when ranking results. No third-party ANN implementation is used.
 `NativeHNSW` in `src/timbre/native_hnsw.py` freezes a Python graph for search.
 `NativeHNSW.load(path, vectors)` uses the existing graph loader to verify the exact
 vector fingerprint and graph structure, then converts the adjacency representation.
-Consequently, loading still temporarily materializes Python adjacency lists. It is
-not yet a direct memory-mapped graph loader.
+That path still temporarily materializes Python adjacency lists.
+
+`NativeHNSW.load_directory(path)` is the direct alternative and does not. It maps
+each array of a completed snapshot with `mmap_mode="r"` after checking the
+completion marker, manifest dtypes, shapes, layer membership and degree limits;
+pass `verify=True` to also re-hash every array. Measured on the large graph, it
+maps 4,537,964,181 bytes on disk in **0.37 s for 0.097 GiB RSS**, and reproduces
+the build-time recall and distance-evaluation counts exactly at all five efSearch
+settings. Snapshots are written by `save_directory`, or converted from a legacy
+NPZ checkpoint with `NativeHNSW.convert`.
 
 Query normalization stays in Python and matches `HNSW.search`. The boundary is
 crossed once per query; C++ performs all graph traversal and dot products while
@@ -71,8 +80,9 @@ Calling `build()` without an order inserts remaining rows in row order. Native
 resume rejects checkpoints from other construction backends; low-bit differences
 in distance computations can change graph edges, so switching backends is not a
 promise of identical continuation. Determinism assumes the same software,
-hardware and native kernel. Loading currently uses the validated Python loader and temporary
-Python adjacency, rather than a memory-mapped graph representation.
+hardware and native kernel. Resuming construction uses the validated Python
+loader and temporary Python adjacency; the memory-mapped `load_directory` path
+above is for immutable query snapshots, not for continuing a build.
 
 Reproduce paired construction measurements using the existing medium embeddings:
 

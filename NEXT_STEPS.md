@@ -181,16 +181,62 @@ serializes to 157,126,470 bytes (sha256 `b4c528cd...`); the direct graph under
 `store/hnsw_construction_large/cpp_direct` is 4,537,964,181 bytes. Measured
 results are in `store/hnsw_construction_large/results.json`.
 
-**These latencies are not a clean measurement and should not be published as
-one.** They are non-monotonic in efSearch (4.447 ms at 16 versus 2.917 ms at
-32), while `mean_distance_evaluations` rises monotonically (245, 348, 547, 933,
-1664), so the algorithm does strictly more work as efSearch grows and the wall
-clock does not reflect it. Peak process RSS was 4.93 GiB against 7.4 GiB of
-system RAM, and the 4 GiB candidate vector file is memory-mapped, so the sweep
-paged against a cold cache; efSearch=16 ran first and shows a 348 ms p99 against
-a 4.4 ms median. Recall figures are unaffected — they are exact set comparisons
-against the held-out oracle. A trustworthy latency curve at this scale requires
-the direct-loading and memory-cap work below.
+**The latencies in that table are a measurement artifact, not a result.** They
+are non-monotonic in efSearch (4.447 ms at 16 versus 2.917 ms at 32) while
+`mean_distance_evaluations` rises monotonically (245, 348, 547, 933, 1664). The
+sweep ran each setting once in ascending order against a cold page cache, so
+efSearch=16 absorbed the paging cost of the 4 GiB memory-mapped vector file and
+shows a 348 ms p99 against a 4.4 ms median. Recall is unaffected, being an exact
+set comparison against the held-out oracle. The clean curve is below.
+
+### Direct loading and warm latency — complete 2026-09-14
+
+`NativeHNSW.load_directory` maps the completed graph without expanding Python
+adjacency: **0.097 GiB RSS in 0.37 s** for a graph that occupies 4,537,964,181
+bytes on disk. Every array stays a `np.memmap`.
+
+Re-measuring on that directly loaded graph, with a warm page cache and efSearch
+settings **interleaved per query** so no setting absorbs another's paging, the
+curve is monotonic:
+
+| efSearch | recall@10 | mean distance evals | p50 | p95 |
+|---|---|---|---|---|
+| 16 | 97.25% | 245 | 0.081 ms | 0.178 ms |
+| 32 | 99.02% | 348 | 0.080 ms | 0.145 ms |
+| 64 | **99.58%** | 547 | **0.145 ms** | 0.249 ms |
+| 128 | 99.85% | 933 | 0.396 ms | 0.880 ms |
+| 256 | 99.92% | 1664 | 1.179 ms | 2.562 ms |
+
+Recall and mean distance evaluations are **identical to the build-time sweep at
+every setting**, confirming the direct loader is behaviourally equivalent. At
+efSearch=64 the large store answers in 0.145 ms median versus 0.193 ms for
+full-medium — 4.2x the corpus at comparable latency. Results are in
+`docs/hnsw_warm_latency_large_results.json`.
+
+### Memory limits — complete 2026-09-14
+
+Page-cache state is what governs latency here; recall never moves. At
+efSearch=64, evicting every graph file with `posix_fadvise(POSIX_FADV_DONTNEED)`
+before the timed run:
+
+| State | recall@10 | p50 | p95 | p99 | major faults |
+|---|---|---|---|---|---|
+| Cold | 99.58% | 1.587 ms | 17.258 ms | 173.749 ms | 1,022 |
+| Warm | 99.58% | 0.377 ms | 0.809 ms | 1.015 ms | 0 |
+
+Cold start costs **171x at p99** and nothing at all in recall. Two negative
+results worth keeping:
+
+- **`RLIMIT_AS` is not a usable memory cap for this workload.** It limits
+  address space, so mapping the 4.09 GiB vector file fails with `OSError` errno
+  12 at caps of 4 GiB and below, regardless of how few pages would be resident.
+  Caps of 6 GiB and above run normally.
+- **`madvise(MADV_DONTNEED)` does not emulate cold storage.** Evicting up to
+  3.85 GB of the mapped vector range produced **zero** major faults and no
+  latency change — the kernel served every page back from page cache. Only
+  file-level `posix_fadvise` eviction produced real major faults.
+
+Measurements are in `docs/hnsw_memory_large_results.json`.
 
 Reproduce (resumes automatically if a checkpoint is present):
 
@@ -202,13 +248,13 @@ PYTHONPATH=src python3 -m timbre.benchmark_construction \
   --backends cpp --m 8 --ef-construction 80 --ef-search 16 32 64 128 256
 ```
 
-Next: direct mmap loading and the memory-cap experiment, which are the
-prerequisite for a usable large-scale latency curve rather than independent
-tasks. Then recall@100 with `--k 100` and `--ef-search` values >= 100, and the
-`store/hnsw_native_large` query-only comparison against the saved graph.
-Open issues: direct mmap loading, memory-cap tables and locality reordering are
-not yet implemented. Musical relevance at large scale is still unevaluated;
-keep it separate from geometric recall.
+Next: recall@100 with `--k 100` and `--ef-search` values >= 100, and locality
+reordering compared under the interleaved warm protocol above. Multithreaded
+search and a third-party library baseline remain unmeasured.
+Open issues: locality reordering is not implemented. Musical relevance at large
+scale is still unevaluated and is the larger gap — geometric recall of 99.58%
+says the index reproduces exact cosine search faithfully, not that the neighbors
+sound alike. Keep the two separate.
 
 The completed full-medium **Python** baseline remains available for comparison:
 
