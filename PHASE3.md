@@ -11,7 +11,15 @@ on 2026-09-10. Download, extraction and vectorization are complete. All 106,574
 tracks were processed: 105,884 embedded, 162 failed and 528 too short, with zero
 pending and 2,144,867 populated vectors. Final store verification passed.
 See [FMA_LARGE.md](FMA_LARGE.md).
-The large-corpus measurements, memory caps and locality reordering remain.
+
+The large native graph is now built and passes the recall gate on all 2,143,867
+indexed segments — 99.58% recall@10 at efSearch=64, rising to 99.92% at
+efSearch=256. Its latency sweep is contaminated by memory pressure and is not a
+usable measurement; see
+[the large-corpus construction results](NEXT_STEPS.md#large-native-construction--complete-2026-09-14).
+Direct memory-mapped loading, enforced memory caps and locality reordering
+remain, and the first two are prerequisites for a clean large-scale latency
+curve.
 
 ## Implementation
 

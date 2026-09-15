@@ -87,8 +87,27 @@ Phase 3 remains in progress. FMA large download, extraction, vectorization and
 final verification completed on 2026-09-10. The large store contains 2,144,867
 populated vectors from 105,884 embedded tracks; 162 failed and 528 were too short,
 with zero pending. No re-vectorization is needed for the index benchmarks.
-See [the large-corpus run and progress commands](FMA_LARGE.md). Large-scale index
-benchmarks, memory-limit experiments and locality reordering are still ahead.
+See [the large-corpus run and progress commands](FMA_LARGE.md).
+
+The large native graph is built and **passes the recall gate on all 2,143,867
+indexed segments**, with 1,000 held-out queries at `M=8, efConstruction=80`:
+
+| efSearch | recall@10 | mean distance evals |
+|---|---|---|
+| 16 | 97.25% | 245 |
+| 32 | 99.02% | 348 |
+| 64 | **99.58%** | 547 |
+| 128 | 99.85% | 933 |
+| 256 | 99.92% | 1664 |
+
+Recall holds across a 4.2x corpus increase: 99.85% on full-medium versus 99.58%
+here, both at efSearch=64. Latencies from this sweep are deliberately omitted.
+They were measured under memory pressure — 4.93 GiB peak RSS against 7.4 GiB of
+RAM, over a memory-mapped 4 GiB vector file — and are non-monotonic in efSearch
+even though distance evaluations rise monotonically. Recall is unaffected, being
+an exact set comparison against the held-out oracle. Memory-limit experiments
+and locality reordering are still ahead, and direct memory-mapped loading is the
+prerequisite for a usable large-scale latency curve.
 
 ## Retrieval and validation
 

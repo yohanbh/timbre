@@ -8,7 +8,10 @@ download, extraction, vectorization and final verification are complete.
 The large store contains 2,144,867 populated vectors from 105,884 embedded tracks,
 with 162 failed, 528 too short and zero pending. Windows disk compaction also
 completed, reclaiming 110.60 GiB. See [FMA_LARGE.md](FMA_LARGE.md).
-The remaining scale and memory experiments are still open.
+The large native graph is built and passes the recall gate at 99.58% recall@10
+on 2,143,867 segments (efSearch=64, 2026-09-14); its latency measurement is not
+trustworthy under memory pressure. Direct mmap loading, memory caps and locality
+reordering are still open.
 See [RETRIEVAL_DIAGNOSIS.md](RETRIEVAL_DIAGNOSIS.md)
 for the retrieval repair and [PHASE2.md](PHASE2.md) for index implementation and results.
 
@@ -153,9 +156,43 @@ answers over 2,143,867 candidates with all query rows held out. See
 
 Completed: large ground-truth artifacts are ready and no re-embedding is required.
 
-Running: start held-out large native construction and search under `store/hnsw_construction_large`
-and `store/hnsw_native_large` with the commands below. Track exact command,
-git hash and output files at each run to preserve reproducibility.
+### Large native construction — complete 2026-09-14
+
+The held-out large graph is built and passes the recall gate on all
+**2,143,867 indexed segments** with 1,000 held-out queries, at
+`M=8, efConstruction=80`:
+
+| efSearch | recall@10 | mean distance evals | p50 | p95 | p99 |
+|---|---|---|---|---|---|
+| 16 | 97.25% | 245 | 4.447 ms | 42.523 ms | 348.544 ms |
+| 32 | 99.02% | 348 | 2.917 ms | 6.254 ms | 9.068 ms |
+| 64 | **99.58%** | 547 | 6.325 ms | 12.741 ms | 16.766 ms |
+| 128 | 99.85% | 933 | 7.141 ms | 18.637 ms | 23.979 ms |
+| 256 | 99.92% | 1664 | 7.530 ms | 13.477 ms | 21.622 ms |
+
+`recall@1` reaches 100% at efSearch >= 128. Recall holds across a 4.2x corpus
+increase: 99.85% on full-medium versus 99.58% here, both at efSearch=64.
+
+The run resumed from the 1,450,000-node checkpoint left by the 2026-09-11
+attempt, which stopped because the host shut down mid-checkpoint rather than
+because the build failed. Resumed insertion took 401.18 s, plus 31.03 s
+initialization, 89.71 s checkpointing and 3.69 s final save. The graph
+serializes to 157,126,470 bytes (sha256 `b4c528cd...`); the direct graph under
+`store/hnsw_construction_large/cpp_direct` is 4,537,964,181 bytes. Measured
+results are in `store/hnsw_construction_large/results.json`.
+
+**These latencies are not a clean measurement and should not be published as
+one.** They are non-monotonic in efSearch (4.447 ms at 16 versus 2.917 ms at
+32), while `mean_distance_evaluations` rises monotonically (245, 348, 547, 933,
+1664), so the algorithm does strictly more work as efSearch grows and the wall
+clock does not reflect it. Peak process RSS was 4.93 GiB against 7.4 GiB of
+system RAM, and the 4 GiB candidate vector file is memory-mapped, so the sweep
+paged against a cold cache; efSearch=16 ran first and shows a 348 ms p99 against
+a 4.4 ms median. Recall figures are unaffected — they are exact set comparisons
+against the held-out oracle. A trustworthy latency curve at this scale requires
+the direct-loading and memory-cap work below.
+
+Reproduce (resumes automatically if a checkpoint is present):
 
 ```bash
 PYTHONPATH=src python3 -m timbre.benchmark_construction \
@@ -163,20 +200,15 @@ PYTHONPATH=src python3 -m timbre.benchmark_construction \
   --oracle store/large/index_groundtruth.npz --db store/large/timbre.db \
   --store store/large/vectors.npy --groundtruth store/large/groundtruth.npz \
   --backends cpp --m 8 --ef-construction 80 --ef-search 16 32 64 128 256
-
-PYTHONPATH=src python3 -m timbre.benchmark_native \
-  --baseline store/hnsw_medium --out store/hnsw_native_large/results.json \
-  --oracle store/large/index_groundtruth.npz --graph store/hnsw_construction_large/cpp_direct \
-  --db store/large/timbre.db --store store/large/vectors.npy \
-  --groundtruth store/large/groundtruth.npz --m 8 --ef-construction 80 \
-  --ef-search 16 32 64 128 256
 ```
 
-Next: add recall@100 runs with `--k 100` and `--ef-search` values >= 100 using the
-saved large graph path, then capture recall/latency gates and move to direct
-loading under memory caps.
+Next: direct mmap loading and the memory-cap experiment, which are the
+prerequisite for a usable large-scale latency curve rather than independent
+tasks. Then recall@100 with `--k 100` and `--ef-search` values >= 100, and the
+`store/hnsw_native_large` query-only comparison against the saved graph.
 Open issues: direct mmap loading, memory-cap tables and locality reordering are
-not yet implemented.
+not yet implemented. Musical relevance at large scale is still unevaluated;
+keep it separate from geometric recall.
 
 The completed full-medium **Python** baseline remains available for comparison:
 
