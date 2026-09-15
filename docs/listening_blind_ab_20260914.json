@@ -1,0 +1,258 @@
+{
+  "seed": 1913937587,
+  "near_rank": 1,
+  "far_rank": 40,
+  "correct": 11,
+  "trials": 19,
+  "p_value": 0.3238029479980469,
+  "replayed_trials": 9,
+  "log": [
+    {
+      "trial": 1,
+      "query_track": 22342,
+      "query_window": 18,
+      "picked": "near",
+      "pair": [
+        "far",
+        "near"
+      ],
+      "replays": 0,
+      "near_score": 0.8707593679428101,
+      "far_score": 0.8066669702529907
+    },
+    {
+      "trial": 2,
+      "query_track": 44477,
+      "query_window": 9,
+      "picked": "near",
+      "pair": [
+        "far",
+        "near"
+      ],
+      "replays": 0,
+      "near_score": 0.8116968870162964,
+      "far_score": 0.7409974932670593
+    },
+    {
+      "trial": 3,
+      "query_track": 74559,
+      "query_window": 12,
+      "picked": "far",
+      "pair": [
+        "near",
+        "far"
+      ],
+      "replays": 1,
+      "near_score": 0.8930573463439941,
+      "far_score": 0.8535398244857788
+    },
+    {
+      "trial": 4,
+      "query_track": 66882,
+      "query_window": 8,
+      "picked": "near",
+      "pair": [
+        "near",
+        "far"
+      ],
+      "replays": 1,
+      "near_score": 0.8286948204040527,
+      "far_score": 0.7735519409179688
+    },
+    {
+      "trial": 5,
+      "query_track": 129610,
+      "query_window": 15,
+      "picked": "far",
+      "pair": [
+        "far",
+        "near"
+      ],
+      "replays": 0,
+      "near_score": 0.7447725534439087,
+      "far_score": 0.6734309196472168
+    },
+    {
+      "trial": 6,
+      "query_track": 67768,
+      "query_window": 3,
+      "picked": "near",
+      "pair": [
+        "far",
+        "near"
+      ],
+      "replays": 0,
+      "near_score": 0.8586242198944092,
+      "far_score": 0.8112795948982239
+    },
+    {
+      "trial": 7,
+      "query_track": 129187,
+      "query_window": 1,
+      "picked": "near",
+      "pair": [
+        "far",
+        "near"
+      ],
+      "replays": 0,
+      "near_score": 0.9188451766967773,
+      "far_score": 0.7875937223434448
+    },
+    {
+      "trial": 8,
+      "query_track": 117252,
+      "query_window": 12,
+      "picked": "far",
+      "pair": [
+        "far",
+        "near"
+      ],
+      "replays": 1,
+      "near_score": 0.8084471225738525,
+      "far_score": 0.7453914880752563
+    },
+    {
+      "trial": 9,
+      "query_track": 4788,
+      "query_window": 18,
+      "picked": "far",
+      "pair": [
+        "far",
+        "near"
+      ],
+      "replays": 0,
+      "near_score": 0.9023267030715942,
+      "far_score": 0.8269810080528259
+    },
+    {
+      "trial": 10,
+      "query_track": 41813,
+      "query_window": 19,
+      "picked": "far",
+      "pair": [
+        "near",
+        "far"
+      ],
+      "replays": 0,
+      "near_score": 0.8765422105789185,
+      "far_score": 0.8347165584564209
+    },
+    {
+      "trial": 11,
+      "query_track": 91857,
+      "query_window": 0,
+      "picked": "far",
+      "pair": [
+        "near",
+        "far"
+      ],
+      "replays": 1,
+      "near_score": 0.8648531436920166,
+      "far_score": 0.8246857523918152
+    },
+    {
+      "trial": 12,
+      "query_track": 51597,
+      "query_window": 1,
+      "picked": "near",
+      "pair": [
+        "near",
+        "far"
+      ],
+      "replays": 1,
+      "near_score": 0.9514381885528564,
+      "far_score": 0.8657243251800537
+    },
+    {
+      "trial": 13,
+      "query_track": 868,
+      "query_window": 8,
+      "picked": "near",
+      "pair": [
+        "near",
+        "far"
+      ],
+      "replays": 0,
+      "near_score": 0.8477275371551514,
+      "far_score": 0.7997956275939941
+    },
+    {
+      "trial": 14,
+      "query_track": 126789,
+      "query_window": 11,
+      "picked": "far",
+      "pair": [
+        "far",
+        "near"
+      ],
+      "replays": 2,
+      "near_score": 0.8887143135070801,
+      "far_score": 0.830780029296875
+    },
+    {
+      "trial": 15,
+      "query_track": 116722,
+      "query_window": 7,
+      "picked": "near",
+      "pair": [
+        "near",
+        "far"
+      ],
+      "replays": 0,
+      "near_score": 0.7907601594924927,
+      "far_score": 0.7181041836738586
+    },
+    {
+      "trial": 16,
+      "query_track": 100745,
+      "query_window": 10,
+      "picked": "near",
+      "pair": [
+        "near",
+        "far"
+      ],
+      "replays": 1,
+      "near_score": 0.7847633361816406,
+      "far_score": 0.6977813243865967
+    },
+    {
+      "trial": 17,
+      "query_track": 70874,
+      "query_window": 13,
+      "picked": "near",
+      "pair": [
+        "far",
+        "near"
+      ],
+      "replays": 1,
+      "near_score": 0.8291831612586975,
+      "far_score": 0.7275022268295288
+    },
+    {
+      "trial": 18,
+      "query_track": 20094,
+      "query_window": 15,
+      "picked": "far",
+      "pair": [
+        "far",
+        "near"
+      ],
+      "replays": 0,
+      "near_score": 0.963239312171936,
+      "far_score": 0.8994739055633545
+    },
+    {
+      "trial": 19,
+      "query_track": 86988,
+      "query_window": 19,
+      "picked": "near",
+      "pair": [
+        "far",
+        "near"
+      ],
+      "replays": 1,
+      "near_score": 0.9190080165863037,
+      "far_score": 0.8462415933609009
+    }
+  ]
+}

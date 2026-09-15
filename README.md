@@ -350,8 +350,8 @@ Earlier diagnostics considered these hypotheses, but did not establish causality
 | Hypothesis | Measurement | Verdict |
 |---|---|---|
 | Hubness (universal neighbours) | top track appears 7x vs 0.4 expected; 71% of tracks appear 0 times | descriptive only |
-| Mean-pooling washes out detail | within-track window similarity **0.979** | inconclusive given overlap and high unrelated-track cosine |
-| Keying on encoding/production | genre agreement 37% > bitrate agreement 30.5% | inconclusive: different label distributions |
+| Mean-pooling washes out detail | within-track window similarity **0.979** | superseded: 0.917 on the replacement checkpoint, and temporal probes diverge — see [LISTENING.md](LISTENING.md) |
+| Keying on encoding/production | genre agreement 37% > bitrate agreement 30.5% | retired: the spoken-word listening control found no production-over-content ranking — see [LISTENING.md](LISTENING.md) |
 
 The controlled checkpoint comparison identifies the original checkpoint as the
 leading cause: changing it raised genre@10 from 25.3% to 57.4% on the same
@@ -363,10 +363,16 @@ leading cause: changing it raised genre@10 from 25.3% to 57.4% on the same
   use far more isotropic data. A graph where nearly all distances sit near 0.87
   has much less structure to exploit, so published recall-vs-`efSearch` curves
   plausibly will not transfer. That is a defensible measured result.
-- **Open question #2 matters more than it looks.** Within-track windows at 0.979
-  mean a track's 20 windows are nearly one vector, so track-level mean-pooling
-  discards most of the temporal resolution the 21x storage paid for. Max-pool and
-  count-in-top-k should behave quite differently from mean.
+- **Open question #2 matters more than it looks — and is now answered.** Within-track
+  windows at 0.979 meant a track's 20 windows were nearly one vector on the original
+  checkpoint. **This does not hold on the replacement checkpoint:** measured over 300
+  sampled tracks, mean within-track pairwise cosine is **0.917**, and first-window
+  versus last-window is **0.821**. Querying offset 0 against a late window shares a
+  median of only **2/10** neighbours, with 11 of 40 sampled tracks fully disjoint, and
+  listening confirms each result set suits its own passage. Temporal resolution is
+  real, so the 21x storage earns its keep and max-pool versus count-in-top-k versus
+  mean is a live experiment rather than a formality. See
+  [the listening findings](LISTENING.md).
 - **The neighbour-selection heuristic risk is amplified.** Weak geometric signal
   gives less to distinguish good neighbours from bad, so a naive top-`M` graph
   will look fine and search badly. Phase 1 ground truth is the only thing that

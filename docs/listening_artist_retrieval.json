@@ -1,0 +1,310 @@
+[
+  {
+    "artist": "Blue Dot Sessions",
+    "n_tracks": 213,
+    "mean_hits_at_20": 7.8,
+    "expected": 0.17053642914331466,
+    "lift": 45.73802816901408,
+    "genre": "Instrumental",
+    "per_query": [
+      1,
+      5,
+      1,
+      20,
+      12
+    ],
+    "queried": [
+      126234,
+      126415,
+      130988,
+      126218,
+      129190
+    ]
+  },
+  {
+    "artist": "The Impossebulls",
+    "n_tracks": 144,
+    "mean_hits_at_20": 4.4,
+    "expected": 0.11529223378702963,
+    "lift": 38.16388888888889,
+    "genre": "Hip-Hop",
+    "per_query": [
+      5,
+      4,
+      6,
+      1,
+      6
+    ],
+    "queried": [
+      82515,
+      110078,
+      110080,
+      145749,
+      144213
+    ]
+  },
+  {
+    "artist": "Squire Tuck",
+    "n_tracks": 121,
+    "mean_hits_at_20": 12.8,
+    "expected": 0.09687750200160128,
+    "lift": 132.12561983471076,
+    "genre": "Instrumental",
+    "per_query": [
+      19,
+      16,
+      18,
+      5,
+      6
+    ],
+    "queried": [
+      115292,
+      116175,
+      114219,
+      134486,
+      116912
+    ]
+  },
+  {
+    "artist": "The Polish Ambassador",
+    "n_tracks": 118,
+    "mean_hits_at_20": 3.6,
+    "expected": 0.09447558046437149,
+    "lift": 38.10508474576272,
+    "genre": "Electronic",
+    "per_query": [
+      2,
+      1,
+      8,
+      4,
+      3
+    ],
+    "queried": [
+      98977,
+      98981,
+      98992,
+      98995,
+      98985
+    ]
+  },
+  {
+    "artist": "Big Blood",
+    "n_tracks": 112,
+    "mean_hits_at_20": 8.6,
+    "expected": 0.08967173738991194,
+    "lift": 95.90535714285713,
+    "genre": "Folk",
+    "per_query": [
+      20,
+      10,
+      8,
+      4,
+      1
+    ],
+    "queried": [
+      11504,
+      12058,
+      12510,
+      63258,
+      12485
+    ]
+  },
+  {
+    "artist": "Ergo Phizmiz",
+    "n_tracks": 112,
+    "mean_hits_at_20": 2.2,
+    "expected": 0.08967173738991194,
+    "lift": 24.53392857142857,
+    "genre": "Instrumental",
+    "per_query": [
+      3,
+      2,
+      2,
+      2,
+      2
+    ],
+    "queried": [
+      14584,
+      14571,
+      24952,
+      14572,
+      28609
+    ]
+  },
+  {
+    "artist": "Cullah",
+    "n_tracks": 81,
+    "mean_hits_at_20": 1.6,
+    "expected": 0.06485188150520417,
+    "lift": 24.671604938271603,
+    "genre": "Hip-Hop",
+    "per_query": [
+      0,
+      1,
+      2,
+      0,
+      5
+    ],
+    "queried": [
+      63747,
+      83718,
+      83706,
+      118649,
+      97324
+    ]
+  },
+  {
+    "artist": "SPCZ",
+    "n_tracks": 77,
+    "mean_hits_at_20": 2.4,
+    "expected": 0.06164931945556445,
+    "lift": 38.92987012987013,
+    "genre": "Electronic",
+    "per_query": [
+      3,
+      1,
+      1,
+      0,
+      7
+    ],
+    "queried": [
+      145758,
+      120461,
+      120450,
+      120443,
+      120457
+    ]
+  },
+  {
+    "artist": "Tha Silent Partner",
+    "n_tracks": 76,
+    "mean_hits_at_20": 2.4,
+    "expected": 0.06084867894315452,
+    "lift": 39.44210526315789,
+    "genre": "Hip-Hop",
+    "per_query": [
+      1,
+      8,
+      0,
+      2,
+      1
+    ],
+    "queried": [
+      13199,
+      84519,
+      108764,
+      94458,
+      96652
+    ]
+  },
+  {
+    "artist": "Derek Clegg",
+    "n_tracks": 75,
+    "mean_hits_at_20": 17.8,
+    "expected": 0.0600480384307446,
+    "lift": 296.4293333333333,
+    "genre": "Folk",
+    "per_query": [
+      17,
+      18,
+      17,
+      20,
+      17
+    ],
+    "queried": [
+      85492,
+      146966,
+      146961,
+      85487,
+      126747
+    ]
+  },
+  {
+    "artist": "transient",
+    "n_tracks": 73,
+    "mean_hits_at_20": 1.6,
+    "expected": 0.05844675740592474,
+    "lift": 27.375342465753427,
+    "genre": "Electronic",
+    "per_query": [
+      1,
+      3,
+      0,
+      3,
+      1
+    ],
+    "queried": [
+      32687,
+      32691,
+      142452,
+      125564,
+      138735
+    ]
+  },
+  {
+    "artist": "C-Doc",
+    "n_tracks": 73,
+    "mean_hits_at_20": 2.2,
+    "expected": 0.05844675740592474,
+    "lift": 37.64109589041096,
+    "genre": "Hip-Hop",
+    "per_query": [
+      2,
+      2,
+      0,
+      4,
+      3
+    ],
+    "queried": [
+      71693,
+      79707,
+      123647,
+      74955,
+      137895
+    ]
+  },
+  {
+    "artist": "Gorowski",
+    "n_tracks": 70,
+    "mean_hits_at_20": 3.0,
+    "expected": 0.05604483586869495,
+    "lift": 53.52857142857143,
+    "genre": "Electronic",
+    "per_query": [
+      0,
+      6,
+      0,
+      4,
+      5
+    ],
+    "queried": [
+      34515,
+      15961,
+      13126,
+      15967,
+      16582
+    ]
+  },
+  {
+    "artist": "Jahzzar",
+    "n_tracks": 70,
+    "mean_hits_at_20": 2.6,
+    "expected": 0.05604483586869495,
+    "lift": 46.39142857142858,
+    "genre": "Country",
+    "per_query": [
+      0,
+      3,
+      0,
+      6,
+      4
+    ],
+    "queried": [
+      134049,
+      80517,
+      63669,
+      87598,
+      87596
+    ]
+  }
+]

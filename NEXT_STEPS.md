@@ -251,10 +251,47 @@ PYTHONPATH=src python3 -m timbre.benchmark_construction \
 Next: recall@100 with `--k 100` and `--ef-search` values >= 100, and locality
 reordering compared under the interleaved warm protocol above. Multithreaded
 search and a third-party library baseline remain unmeasured.
-Open issues: locality reordering is not implemented. Musical relevance at large
-scale is still unevaluated and is the larger gap — geometric recall of 99.58%
-says the index reproduces exact cosine search faithfully, not that the neighbors
-sound alike. Keep the two separate.
+Open issues: locality reordering is not implemented.
+
+## Listening evaluation — first session 2026-09-14
+
+Musical relevance now has measurements; see [LISTENING.md](LISTENING.md) for the
+full findings and `tests/artist_retrieval.py` / `tests/blind_ab.py` for the tools.
+Keep these judgments separate from geometric index recall.
+
+Established on the medium store:
+
+- **Temporal resolution is real.** Offset-0 versus late-window queries share a
+  median 2/10 neighbours, 11 of 40 fully disjoint, and listening confirms each
+  set suits its own passage. Within-track pairwise cosine is 0.917 on the
+  replacement checkpoint, not the 0.979 the README carried from the original.
+- **The production-era hypothesis is retired.** The spoken-word control produced
+  no case of old-recording character outranking musical content.
+- **Artist self-retrieval lifts a median 39.2x over chance**, and the two cases
+  checked by ear reflect genuine musical similarity rather than genre artifacts.
+- **Blind A/B is inconclusive and was underpowered.** 11/19, p = 0.32, with only
+  ~30% power against a true 65% skill level.
+
+### Next listening step: prospective gap-stratified blind A/B
+
+The one result worth chasing is post-hoc and needs a designed test. Splitting the
+19 trials at the median rank1-rank40 cosine gap gave 8/10 correct on clearer
+pairs versus 3/9 on closer ones — listener accuracy appears to track the model's
+own confidence. The cutoff was chosen after seeing the data and the subgroup is
+p = 0.055 at n = 10, so it is a hypothesis.
+
+Design for the next run:
+
+1. Extend `tests/blind_ab.py` to sample candidate pairs across a designed range
+   of cosine gaps rather than always rank 1 versus rank 40.
+2. Run ~40 trials, stratified so each gap band gets comparable coverage.
+3. Report accuracy per gap band. The useful output is the similarity threshold
+   below which ranking stops being audible, not a single accuracy number.
+
+Then: the max versus mean versus count-in-top-k aggregation experiment, now that
+temporal resolution is established, and repeating the artist and temporal probes
+on the large store (105,884 tracks, 248 artists with 50+ tracks) to see whether
+these findings survive 4.2x scale.
 
 The completed full-medium **Python** baseline remains available for comparison:
 
