@@ -127,11 +127,11 @@ def main():
     order = np.arange(len(vectors))
     if a.order == "shuffled":
         order = np.random.default_rng(a.seed + 1).permutation(order)
-        report = {"vectors": len(vectors), "queries": len(queries), "dimension": vectors.shape[1],
-                  "seed": a.seed, "order": a.order, "blas_threads": 1,
-                  "numpy_version": np.__version__, "python_version": platform.python_version(),
-                  "source_model": str(phase1["source_model"]),
-                  "source_store_sha256": str(phase1["source_store_sha256"]), "points": []}
+    report = {"vectors": len(vectors), "queries": len(queries), "dimension": vectors.shape[1],
+              "seed": a.seed, "order": a.order, "blas_threads": 1,
+              "numpy_version": np.__version__, "python_version": platform.python_version(),
+              "source_model": str(phase1["source_model"]),
+              "source_store_sha256": str(phase1["source_store_sha256"]), "points": []}
 
     for M in a.m:
         for ef_construction in a.ef_construction:
