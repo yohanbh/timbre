@@ -6,7 +6,7 @@ cosine search; it says nothing about whether the retrieved audio sounds alike.
 This file records what listening established.
 
 All results below are on the **medium store** (24,980 tracks, 510,064 vectors,
-`laion/larger_clap_general`). Session date 2026-09-14.
+`laion/larger_clap_general`). Sessions 2026-09-14 and 2026-09-16.
 
 ## Tools
 
@@ -33,8 +33,10 @@ gap — over 60 sampled queries the rank-1 to rank-40 gap ranged from 0.042 to
 by score difference. Default bands are 0.00-0.02, 0.02-0.05, 0.05-0.10 and 0.10+,
 taken from the measured pooled distribution (p10 = 0.007, median = 0.044,
 p90 = 0.115). The band schedule is round-robin then shuffled, so an interrupted
-session stays balanced. The useful output is the lowest band that reaches 70%
-accuracy: the similarity threshold below which ranking is inaudible.
+session stays balanced. It reports the lowest band reaching 70% accuracy, which
+would be the threshold below which ranking is inaudible **if accuracy varied with
+gap at all** — section 5 found it does not, so treat that line as diagnostic
+output rather than a measured threshold.
 
 ## 1. Temporal resolution is real
 
@@ -122,10 +124,10 @@ mean nothing is genuinely close, but the listener heard a real common thread --
 horns, low-key mellow singing, funk, samba/reggae feel -- and rated the
 neighbourhood "reasonable, but it could be better."
 
-## 4. Blind A/B: inconclusive overall, suggestive by confidence
+## 4. Session 1 blind A/B: inconclusive and underpowered
 
-**Finding: the headline result is null and underpowered. The interesting signal
-is that listener accuracy tracks the model's own confidence.**
+**Finding: null and underpowered. The post-hoc split recorded below looked
+promising and was rejected by session 5 — read both sections together.**
 
 19 scored trials, rank 1 versus rank 40, seed 1913937587. Raw log in
 `docs/listening_blind_ab_20260914.json`.
@@ -165,13 +167,76 @@ n = 10. It needs a prospective test.
 Replaying did not help (5/9 versus 6/10 first-listen), consistent with those
 trials being genuinely ambiguous rather than mis-heard.
 
+## 5. Session 2: the gap hypothesis is rejected
+
+**Finding: listener accuracy does not track the candidate cosine gap. The
+session-1 split was a small-sample artifact.**
+
+38 scored trials, gap-stratified over four bands, seed 4163856153. Raw log in
+`docs/listening_blind_ab_20260916.json`.
+
+| Cosine gap | Correct | Accuracy | p |
+|---|---|---|---|
+| 0.00-0.02 | 7/10 | 70% | 0.1719 |
+| 0.02-0.05 | 4/9 | 44% | 0.7461 |
+| 0.05-0.10 | 6/9 | 67% | 0.2539 |
+| 0.10+ | 6/10 | 60% | 0.3770 |
+
+Overall 23/38 (61%), p = 0.1279.
+
+There is no trend. The point-biserial correlation between gap and correctness is
+**r = +0.037, permutation p = 0.82**. The harness reporting "lowest band reaching
+70%" as the *smallest* gap band is itself the tell: that is noise landing in the
+first bucket, not a threshold. Re-running session 1's median split on this data
+gives 63% versus 58%, against the 80% versus 33% that motivated the test.
+
+No fatigue effect (63% first half, 58% second). Replay tracked difficulty
+sensibly: replayed trials had a median gap of 0.033 against 0.065 for
+first-listen trials.
+
+## 6. Pooled result: a modest effect, unconfirmed
+
+Both sessions used the same listener, the same store, and rank 1 against a worse
+candidate, so they pool.
+
+| | Score |
+|---|---|
+| Session 1 | 11/19 |
+| Session 2 | 23/38 |
+| **Pooled** | **34/57 (60%), p = 0.0924** |
+
+95% confidence interval on the pooled rate: **47% to 72%**. Not significant, but
+centered above chance and mostly excluding it. At n = 57 the design has 67% power
+against a true 65% effect, so this remains "cannot tell", leaning positive.
+
+The defensible statement is that there is **probably a real but modest
+discrimination effect near 60%**, and confirming it needs roughly 150 trials.
+
+| Trials | Power vs true 60% | vs true 65% |
+|---|---|---|
+| 57 (current) | 37% | 67% |
+| 100 | 62% | 91% |
+| 150 | 77% | 98% |
+| 200 | 86% | 99% |
+
+### Untested alternative: absolute similarity, not gap
+
+Splitting session 2 by the absolute `near_score` rather than the gap:
+
+| Subgroup | Accuracy | p |
+|---|---|---|
+| near_score >= 0.883 (query has a genuinely close match) | 13/19 (68%) | 0.084 |
+| near_score < 0.883 (nothing close to the query) | 10/19 (53%) | 0.500 |
+
+This is a more plausible mechanism than the gap — a listener can tell when the
+top hit is genuinely similar, and cannot when the whole neighbourhood is
+mediocre. **It is explicitly untested.** The cutoff was chosen after seeing the
+data, n = 19 per side, p = 0.084. Recording it here to avoid repeating the
+session-1 mistake of treating a post-hoc split as a result. Testing it would
+require stratifying by `near_score` the way session 2 stratified by gap.
+
 ## Open
 
-- **Prospective gap-stratified blind A/B, ~40 trials.** Sample candidate pairs
-  across a designed range of cosine gaps instead of always rank 1 versus rank 40.
-  This tests the 80%/33% split at adequate power and locates the similarity
-  threshold below which the index's ranking stops being audible -- more useful
-  than a single accuracy number.
 - Aggregation experiment: max versus mean versus count-in-top-k, now that
   temporal resolution is established.
 - Repeat the artist and temporal probes on the large store (105,884 tracks,

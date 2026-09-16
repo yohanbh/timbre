@@ -9,9 +9,11 @@ The large store contains 2,144,867 populated vectors from 105,884 embedded track
 with 162 failed, 528 too short and zero pending. Windows disk compaction also
 completed, reclaiming 110.60 GiB. See [FMA_LARGE.md](FMA_LARGE.md).
 The large native graph is built and passes the recall gate at 99.58% recall@10
-on 2,143,867 segments (efSearch=64, 2026-09-14); its latency measurement is not
-trustworthy under memory pressure. Direct mmap loading, memory caps and locality
-reordering are still open.
+on 2,143,867 segments (efSearch=64, 2026-09-14), answering in 0.145 ms median
+from a directly memory-mapped graph. Direct loading and the memory-limit
+experiments are complete; locality reordering is still open.
+Musical relevance now has its own measurements in [LISTENING.md](LISTENING.md),
+kept separate from geometric recall.
 See [RETRIEVAL_DIAGNOSIS.md](RETRIEVAL_DIAGNOSIS.md)
 for the retrieval repair and [PHASE2.md](PHASE2.md) for index implementation and results.
 
@@ -272,29 +274,23 @@ Established on the medium store:
 - **Blind A/B is inconclusive and was underpowered.** 11/19, p = 0.32, with only
   ~30% power against a true 65% skill level.
 
-### Next listening step: prospective gap-stratified blind A/B
+### Listening: blind A/B is closed
 
-The one result worth chasing is post-hoc and needs a designed test. Splitting the
-19 trials at the median rank1-rank40 cosine gap gave 8/10 correct on clearer
-pairs versus 3/9 on closer ones — listener accuracy appears to track the model's
-own confidence. The cutoff was chosen after seeing the data and the subgroup is
-p = 0.055 at n = 10, so it is a hypothesis.
+Session 2 ran the prospective gap-stratified test and **rejected** the session-1
+hypothesis. Accuracy does not track the candidate cosine gap: 23/38 overall with
+bands at 70%, 44%, 67% and 60%, and a gap-versus-correctness correlation of
+r = +0.037 (permutation p = 0.82). The 80%/33% split that motivated the test was
+a small-sample artifact.
 
-The harness is built and verified; only the listening session remains:
+Pooling both sessions gives **34/57 (60%), p = 0.0924**, 95% CI 47%-72% — a
+probably-real but modest effect that would need roughly 150 trials to confirm.
+Not worth the listening hours: the neighbourhood-quality findings in sections
+1-3 of [LISTENING.md](LISTENING.md) are better evidence and were cheaper to get.
 
-```bash
-USE_TF=0 PYTHONPATH=src python3 tests/blind_ab.py --trials 40
-```
-
-`tests/blind_ab.py` now defaults to gap-stratified sampling over four bands
-(0.00-0.02, 0.02-0.05, 0.05-0.10, 0.10+) and reports accuracy per band plus the
-lowest band reaching 70%. Verified that 24 of 24 sampled draws landed in their
-requested band. `--mode rank` reproduces the session-1 protocol.
-
-Run ~40 trials in one quiet sitting, and do not skip hard trials — skipping only
-the difficult ones inflates the score. Note that 40 trials gives roughly 57%
-power against a true 65% skill level; an ambiguous result means the design needs
-80+ trials, not that there is no effect.
+One untested alternative is recorded there: accuracy may track the **absolute**
+near_score (68% when the top hit is genuinely close, 53% when nothing is) rather
+than the gap. Post-hoc, n = 19 per side, p = 0.084. Testing it would mean
+stratifying by near_score the way session 2 stratified by gap.
 
 Then: the max versus mean versus count-in-top-k aggregation experiment, now that
 temporal resolution is established, and repeating the artist and temporal probes
