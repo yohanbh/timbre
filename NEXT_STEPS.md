@@ -280,13 +280,21 @@ pairs versus 3/9 on closer ones — listener accuracy appears to track the model
 own confidence. The cutoff was chosen after seeing the data and the subgroup is
 p = 0.055 at n = 10, so it is a hypothesis.
 
-Design for the next run:
+The harness is built and verified; only the listening session remains:
 
-1. Extend `tests/blind_ab.py` to sample candidate pairs across a designed range
-   of cosine gaps rather than always rank 1 versus rank 40.
-2. Run ~40 trials, stratified so each gap band gets comparable coverage.
-3. Report accuracy per gap band. The useful output is the similarity threshold
-   below which ranking stops being audible, not a single accuracy number.
+```bash
+USE_TF=0 PYTHONPATH=src python3 tests/blind_ab.py --trials 40
+```
+
+`tests/blind_ab.py` now defaults to gap-stratified sampling over four bands
+(0.00-0.02, 0.02-0.05, 0.05-0.10, 0.10+) and reports accuracy per band plus the
+lowest band reaching 70%. Verified that 24 of 24 sampled draws landed in their
+requested band. `--mode rank` reproduces the session-1 protocol.
+
+Run ~40 trials in one quiet sitting, and do not skip hard trials — skipping only
+the difficult ones inflates the score. Note that 40 trials gives roughly 57%
+power against a true 65% skill level; an ambiguous result means the design needs
+80+ trials, not that there is no effect.
 
 Then: the max versus mean versus count-in-top-k aggregation experiment, now that
 temporal resolution is established, and repeating the artist and temporal probes

@@ -14,14 +14,27 @@ All results below are on the **medium store** (24,980 tracks, 510,064 vectors,
 # Automated: artist self-retrieval lift over chance.
 USE_TF=0 PYTHONPATH=src python3 tests/artist_retrieval.py
 
-# Interactive: blind A/B, rank 1 vs rank 40, with replay.
-USE_TF=0 PYTHONPATH=src python3 tests/blind_ab.py --trials 20
+# Interactive: gap-stratified blind A/B (default).
+USE_TF=0 PYTHONPATH=src python3 tests/blind_ab.py --trials 40
+
+# Interactive: the session-1 fixed-rank protocol.
+USE_TF=0 PYTHONPATH=src python3 tests/blind_ab.py --mode rank --near 1 --far 40
 ```
 
 `tests/blind_ab.py` plays the query passage, then two candidates in random
 order, and never reveals which is which until the summary. Answer `1`/`2`,
 `r` to replay the whole trial, `s` to skip, `q` to stop. It reports a one-sided
 binomial p-value and splits the score by whether a trial was replayed.
+
+**Gap mode** (default) samples pairs so each band of `near_score - far_score`
+gets comparable coverage, then reports accuracy per band. Rank does not control
+gap — over 60 sampled queries the rank-1 to rank-40 gap ranged from 0.042 to
+0.383 — so the nearer candidate is fixed at rank 1 and the farther one is chosen
+by score difference. Default bands are 0.00-0.02, 0.02-0.05, 0.05-0.10 and 0.10+,
+taken from the measured pooled distribution (p10 = 0.007, median = 0.044,
+p90 = 0.115). The band schedule is round-robin then shuffled, so an interrupted
+session stays balanced. The useful output is the lowest band that reaches 70%
+accuracy: the similarity threshold below which ranking is inaudible.
 
 ## 1. Temporal resolution is real
 
