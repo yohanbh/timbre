@@ -301,11 +301,24 @@ order: track order clusters 5.7x more than shuffled (99.0% versus 17.4%
 consecutive same-genre) and costs 13% more build time, but every recall delta is
 under 0.1 points with inconsistent sign.
 
-Remaining to close the initial scope: locality reordering (the last explicit
-Phase 3 deliverable), an hnswlib/FAISS baseline for the honest-calibration
-README section, then recall@100 and multithreaded throughput to complete the
-spec's measurement table. Repeating the artist and temporal listening probes on
-the large store is also open.
+Locality reordering is also done and answered negatively: BFS permutation
+leaves vector pages per neighbourhood unchanged (9.73 to 9.84 on 2.14M nodes)
+because a 512-d float32 vector is exactly half a 4 KiB page. The permutation
+itself is verified correct — identical top-10 sets at every efSearch setting on
+all 2,143,867 nodes.
+
+Cold-cache timings on this host cannot separate the layouts: a first run showed
+BFS ahead 1.28x, a swapped-order repeat inverted it, and the same layout varied
+6x between runs. Whichever layout is measured second wins. **Any future cold
+measurement needs randomized order and repeats**, not one pass per layout.
+Deciding whether to put an error bar on the cold penalty (currently 200-1200x
+at p99, layout-independent) is open.
+
+Remaining to close the initial scope: an hnswlib/FAISS baseline for the
+honest-calibration README section, then recall@100 and multithreaded throughput
+to complete the spec's measurement table. Repeating the artist and temporal
+listening probes on the large store is also open, as is the aggregation
+listening tiebreak in LISTENING.md.
 
 The completed full-medium **Python** baseline remains available for comparison:
 

@@ -1,0 +1,51 @@
+{
+  "oracle": "store/large/index_groundtruth.npz",
+  "ef_search": 64,
+  "k": 10,
+  "queries": 1000,
+  "layouts": {
+    "insertion": {
+      "cold": {
+        "recall_at_10": 0.9958,
+        "p50_ms": 4.3392320003476925,
+        "p95_ms": 48.21990545187862,
+        "p99_ms": 885.3828614793744,
+        "minor_faults": 63688,
+        "major_faults": 1898
+      },
+      "warm": {
+        "recall_at_10": 0.9958,
+        "p50_ms": 0.3152390017930884,
+        "p95_ms": 0.533396052014723,
+        "p99_ms": 0.7593028718474669,
+        "minor_faults": 2,
+        "major_faults": 0
+      },
+      "cold_p99_penalty": 1166.047033807657
+    },
+    "bfs": {
+      "cold": {
+        "recall_at_10": 0.9958,
+        "p50_ms": 0.761642500947346,
+        "p95_ms": 33.88808559866443,
+        "p99_ms": 690.8789606989725,
+        "minor_faults": 68582,
+        "major_faults": 2086
+      },
+      "warm": {
+        "recall_at_10": 0.9958,
+        "p50_ms": 0.33165050081152003,
+        "p95_ms": 0.551826051196258,
+        "p99_ms": 0.7171416382698226,
+        "minor_faults": 1,
+        "major_faults": 0
+      },
+      "cold_p99_penalty": 963.3786742125147
+    }
+  },
+  "cold_p99_ratio_base_over_other": 1.2815310811949163,
+  "order_control": {
+    "note": "A swapped-order repeat is in docs/hnsw_locality_cold_swapped_results.json. In both runs the layout measured SECOND was faster, so the apparent 1.28x advantage here is a run-order artifact, not locality. The same layout varies up to 6x in cold p99 between runs.",
+    "swapped_run": "docs/hnsw_locality_cold_swapped_results.json"
+  }
+}

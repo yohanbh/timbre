@@ -1,0 +1,46 @@
+{
+  "graph": "store/hnsw_construction_large/cpp_direct",
+  "out": "store/hnsw_locality_large",
+  "nodes": 2143867,
+  "queries": 1000,
+  "k": 10,
+  "bfs_seconds": 16.1,
+  "permute_seconds": 704.6,
+  "pages_per_neighbourhood": {
+    "before": 9.7251,
+    "after": 9.8367
+  },
+  "points": [
+    {
+      "ef_search": 16,
+      "recall_before": 0.9724999999999999,
+      "recall_after": 0.9724999999999999,
+      "identical_sets": true
+    },
+    {
+      "ef_search": 32,
+      "recall_before": 0.9902,
+      "recall_after": 0.9902,
+      "identical_sets": true
+    },
+    {
+      "ef_search": 64,
+      "recall_before": 0.9958,
+      "recall_after": 0.9958,
+      "identical_sets": true
+    },
+    {
+      "ef_search": 128,
+      "recall_before": 0.9984999999999999,
+      "recall_after": 0.9984999999999999,
+      "identical_sets": true
+    },
+    {
+      "ef_search": 256,
+      "recall_before": 0.9992000000000001,
+      "recall_after": 0.9992000000000001,
+      "identical_sets": true
+    }
+  ],
+  "timing_note": "BFS and permute timings are from the original 2026-09-16 run; the recall sweep was re-run with --reuse after the interleaved version thrashed (607,357 major faults, 1.3 TB read)."
+}

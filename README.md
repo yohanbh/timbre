@@ -184,6 +184,63 @@ PYTHONPATH=src python3 -m timbre.benchmark_hnsw --vectors 125000 --queries 1000 
   --order track --out store/hnsw_order_track
 ```
 
+### Locality reordering recovers nothing at 512-d float32
+
+HNSW search is a pointer chase, so once the graph outgrows RAM every hop can
+fault. `src/timbre/reorder.py` permutes node IDs into BFS order from the
+entrypoint, so nodes reached together in a traversal sit together on disk.
+
+The permutation is correct: on all **2,143,867** nodes it produced **identical
+top-10 sets** at every efSearch setting, not merely equal recall. The tool fails
+rather than reports if recall moves.
+
+It does not help. Vector pages touched per layer-0 neighbourhood:
+
+| Graph | Before | After |
+|---|---|---|
+| 125,000 | 10.09 | 10.12 |
+| 2,143,867 | 9.73 | 9.84 |
+
+The reason is arithmetic. A 512-dimensional float32 vector is **2,048 bytes —
+exactly half a 4 KiB page**, so two vectors share a page and co-locating
+neighbours requires landing them within about two consecutive IDs. With ~10.5
+neighbours per node the floor is ~5.75 pages and both layouts sit near 9.8. BFS
+did improve ID locality by 35% (mean neighbour-ID distance 26,634 to 17,324);
+that improvement cannot cash out at this page-to-record ratio. BFS is in fact
+*worse* on the measure that matters — 1.06% of neighbours within two IDs versus
+16.56% for insertion order — because it numbers a node's neighbours across an
+expanding frontier rather than adjacent to their source.
+
+This is a result about 512-d float32 on 4 KiB pages, not a claim that no
+reordering can ever help. A narrower vector, a larger page, or a layout that
+co-locates a node *with its own neighbours* rather than with its BFS cohort
+would each change the arithmetic.
+
+**Cold-cache timings on this host are not reliable enough to distinguish the
+layouts.** A first run showed BFS ahead at 1.28x on cold p99; a swapped-order
+repeat inverted it. In both runs whichever layout was measured *second* won,
+because `posix_fadvise` evicts one graph's files while the machine's broader
+cache state carries over. The same layout varied up to **6x** in cold p99
+between runs (885.4 ms versus 146.8 ms). The tell was that the apparently faster
+layout also took *more* major faults, which is incoherent if locality were the
+cause. Warm p99 is stable at **0.66-0.76 ms** for both layouts across every run.
+A trustworthy cold comparison needs randomized order and repeats, not one pass
+per layout. See [the results](docs/hnsw_locality_cold_results.json) and
+[the swapped-order control](docs/hnsw_locality_cold_swapped_results.json).
+
+Reproduce:
+
+```bash
+PYTHONPATH=src python3 -m timbre.reorder \
+  --graph store/hnsw_construction_large/cpp_direct --out store/hnsw_locality_large \
+  --oracle store/large/index_groundtruth.npz --store store/large/vectors.npy
+
+USE_TF=0 OPENBLAS_NUM_THREADS=1 PYTHONPATH=src python3 tests/locality_cold.py \
+  --graphs store/hnsw_construction_large/cpp_direct store/hnsw_locality_large \
+  --labels insertion bfs \
+  --oracle store/large/index_groundtruth.npz --store store/large/vectors.npy
+```
+
 ## Retrieval and validation
 
 ```bash
