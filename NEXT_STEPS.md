@@ -292,10 +292,20 @@ near_score (68% when the top hit is genuinely close, 53% when nothing is) rather
 than the gap. Post-hoc, n = 19 per side, p = 0.084. Testing it would mean
 stratifying by near_score the way session 2 stratified by gap.
 
-Then: the max versus mean versus count-in-top-k aggregation experiment, now that
-temporal resolution is established, and repeating the artist and temporal probes
-on the large store (105,884 tracks, 248 artists with 50+ tracks) to see whether
-these findings survive 4.2x scale.
+Open questions 2 and 3 are answered and recorded in the README. Segment
+aggregation: all four rules score 67.0-67.2% genre@10, a 0.20-point spread
+against a 1.11 SEM, while max and mean share only 6.1/10 results and never
+returned an identical top-10 across 150 queries — genre agreement cannot
+separate them, and the listening tiebreak is open in LISTENING.md. Insertion
+order: track order clusters 5.7x more than shuffled (99.0% versus 17.4%
+consecutive same-genre) and costs 13% more build time, but every recall delta is
+under 0.1 points with inconsistent sign.
+
+Remaining to close the initial scope: locality reordering (the last explicit
+Phase 3 deliverable), an hnswlib/FAISS baseline for the honest-calibration
+README section, then recall@100 and multithreaded throughput to complete the
+spec's measurement table. Repeating the artist and temporal listening probes on
+the large store is also open.
 
 The completed full-medium **Python** baseline remains available for comparison:
 

@@ -123,6 +123,67 @@ See [memory and loading measurements](docs/hnsw_memory_large_results.json) and
 [the warm latency curve](docs/hnsw_warm_latency_large_results.json). Locality
 reordering, multithreaded search and library baselines are still ahead.
 
+## Open questions — measured results
+
+### Insertion order does not damage the graph
+
+FMA is ordered by track ID, which correlates with album and genre, so a naive
+build inserts thousands of similar vectors consecutively. Measured on the real
+corpus, **99.0%** of consecutive inserts in track order share the previous
+track's genre, against **17.4%** shuffled — the clustering is real, 5.7x.
+
+It changes nothing. Both graphs on 125,000 vectors at `M=8, efConstruction=80`,
+with the same 1,000 held-out queries and the same exact oracle:
+
+| efSearch | Shuffled | Track order | Delta |
+|---|---|---|---|
+| 16 | 95.72% | 95.64% | -0.08 |
+| 32 | 98.36% | 98.34% | -0.02 |
+| 64 | 99.43% | 99.41% | -0.02 |
+| 128 | 99.81% | 99.74% | -0.07 |
+| 256 | 99.94% | 99.95% | +0.01 |
+
+Every difference is under 0.1 points and the sign is inconsistent, which is
+noise rather than degradation. Track order did cost **13% more build time**
+(212.89 s versus 189.15 s) and a marginally larger graph (9,453,842 versus
+9,321,766 bytes), consistent with more pruning work when consecutive inserts
+compete for the same neighbourhoods. The diversified neighbour-selection
+heuristic appears to be what absorbs the clustering. Shuffled remains the
+default. [Full results](docs/hnsw_order_track_results.json).
+
+### Segment aggregation: genre agreement cannot separate the rules
+
+A track has 20-21 chances to match, so ranking needs a rule to collapse window
+hits into one track score. Compared on 2,000 queries over the medium store,
+scored by genre agreement among the top 10 distinct tracks (chance 17.2%):
+
+| Rule | genre@10 | SEM | ms/query |
+|---|---|---|---|
+| max — best window, current search behaviour | 67.0% | 0.8 | 1.41 |
+| mean — average over real windows | 67.2% | 0.8 | 1.69 |
+| topk — mean of the best 3 | 67.0% | 0.8 | 7.84 |
+| count — windows above 0.8 | 67.0% | 0.8 | 3.00 |
+
+The spread is **0.20 points against a SEM of 1.11**: indistinguishable.
+
+That is not the same as the choice being irrelevant. The rules return
+substantially different music — **max and mean share only 6.1 of 10 results and
+produced an identical top-10 in 0 of 150 queries**. They disagree constantly and
+score the same, which locates the limit of genre agreement as a relevance proxy
+rather than settling the question. A listening comparison on the cases where the
+rules disagree is recorded as open in [LISTENING.md](LISTENING.md). `max` stays
+the default: it is the cheapest of the four and already what `exact_track_topk`
+implements. [Full results](docs/aggregation_results.json).
+
+Reproduce:
+
+```bash
+USE_TF=0 OPENBLAS_NUM_THREADS=1 PYTHONPATH=src python3 tests/aggregation_test.py 2000
+PYTHONPATH=src python3 -m timbre.benchmark_hnsw --vectors 125000 --queries 1000 \
+  --m 8 --ef-construction 80 --ef-search 16 32 64 128 256 \
+  --order track --out store/hnsw_order_track
+```
+
 ## Retrieval and validation
 
 ```bash

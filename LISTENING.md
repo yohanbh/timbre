@@ -237,7 +237,12 @@ require stratifying by `near_score` the way session 2 stratified by gap.
 
 ## Open
 
-- Aggregation experiment: max versus mean versus count-in-top-k, now that
-  temporal resolution is established.
+- **Aggregation tiebreak (needs listening).** The automated aggregation
+  experiment found all four rules score identically on genre agreement (67.0-67.2%,
+  spread 0.20 points against a SEM of 1.11) while ranking very differently: max
+  and mean share only 6.1 of 10 results and never returned an identical top-10
+  across 150 queries. Genre agreement cannot separate them. Deciding whether max
+  or mean retrieves better music means listening to cases where they disagree.
+  See `docs/aggregation_results.json`.
 - Repeat the artist and temporal probes on the large store (105,884 tracks,
   248 artists with 50+ tracks) to see whether findings survive 4.2x scale.

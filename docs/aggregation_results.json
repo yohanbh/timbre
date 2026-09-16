@@ -1,0 +1,59 @@
+{
+  "queries": 2000,
+  "k": 10,
+  "top": 3,
+  "threshold": 0.8,
+  "chance": 0.17229266519700948,
+  "seed": 20260909,
+  "tracks": 24980,
+  "windows": 510064,
+  "rules": {
+    "max": {
+      "genre_at_k": 0.6701,
+      "sem": 0.007813035054214155,
+      "lift": 3.889312404760636,
+      "ms_per_query": 1.411423007511985
+    },
+    "mean": {
+      "genre_at_k": 0.67205,
+      "sem": 0.007952894002280287,
+      "lift": 3.9006303560951876,
+      "ms_per_query": 1.6856444020168055
+    },
+    "topk": {
+      "genre_at_k": 0.6701000000000001,
+      "sem": 0.007844664708079695,
+      "lift": 3.8893124047606364,
+      "ms_per_query": 7.84182827099994
+    },
+    "count": {
+      "genre_at_k": 0.6700499999999999,
+      "sem": 0.007885435231767312,
+      "lift": 3.889022200880262,
+      "ms_per_query": 2.9977836020034374
+    }
+  },
+  "best": "mean",
+  "best_minus_max": {
+    "difference": 0.0019500000000000073,
+    "sem": 0.011148633986721643
+  },
+  "top10_overlap_with_max": {
+    "note": "150 queries, medium store; mean shared tracks out of 10 and count of identical top-10 sets",
+    "mean": {
+      "overlap": 6.1,
+      "identical": 0,
+      "n": 150
+    },
+    "topk": {
+      "overlap": 8.8,
+      "identical": 28,
+      "n": 150
+    },
+    "count": {
+      "overlap": 7.1,
+      "identical": 45,
+      "n": 150
+    }
+  }
+}
