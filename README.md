@@ -241,6 +241,63 @@ USE_TF=0 OPENBLAS_NUM_THREADS=1 PYTHONPATH=src python3 tests/locality_cold.py \
   --oracle store/large/index_groundtruth.npz --store store/large/vectors.npy
 ```
 
+### Baseline gap: 1.5-2.0x behind hnswlib, and where it goes
+
+hnswlib and FAISS are reference baselines only and never appear in the serving
+path. All three built fresh in one process over the same **509,064** candidates
+and 1,000 held-out queries, at `M=8, efConstruction=80`, one thread everywhere
+(`OMP_NUM_THREADS=1`, `faiss.omp_set_num_threads(1)`, `hnswlib num_threads=1`),
+one query per call rather than a batch, scored against the same exact oracle.
+
+| efSearch | ours p50 | hnswlib p50 | FAISS p50 | gap vs hnswlib |
+|---|---|---|---|---|
+| 16 | 0.111 ms | 0.076 ms | 0.078 ms | 1.45x |
+| 32 | 0.143 ms | 0.091 ms | 0.071 ms | 1.58x |
+| 64 | 0.313 ms | 0.159 ms | 0.121 ms | 1.97x |
+| 128 | 0.521 ms | 0.336 ms | 0.222 ms | 1.55x |
+| 256 | 0.882 ms | 0.597 ms | 0.415 ms | 1.48x |
+
+Recall is not what we are giving up. **Ours is the highest at every setting:**
+
+| efSearch | ours | hnswlib | FAISS |
+|---|---|---|---|
+| 16 | **98.92%** | 97.76% | 98.22% |
+| 32 | **99.60%** | 99.37% | 99.40% |
+| 64 | **99.85%** | 99.74% | 99.75% |
+| 128 | 99.89% | 99.83% | 99.88% |
+| 256 | 99.90% | 99.84% | **99.92%** |
+
+Build time: ours 163.5 s, FAISS 116.8 s, hnswlib 59.1 s.
+
+**Where the time goes.** At `efSearch=64` a query costs 254.5 us over 475.5
+distance evaluations — **536 ns per evaluation**. A 512-dimensional float32 dot
+product is 512 multiply-adds; at ~3 GHz that is ~171 ns scalar, ~43 ns with
+4-wide SSE2, and ~21 ns with 8-wide AVX2. We are an order of magnitude above
+even the scalar estimate.
+
+The kernel in `src/timbre/_hnsw_native.cpp` is written *for* vectorization —
+eight independent accumulators specifically so a compiler can use SIMD without
+fast-math reassociation — but it is compiled with `-O3 -ffp-contract=off` and no
+architecture flag. `-O3` alone targets baseline x86-64, so it emits SSE2 and
+never uses the AVX2 and FMA this CPU reports in `/proc/cpuinfo`. hnswlib ships
+hand-written AVX/AVX-512 intrinsics with runtime dispatch. That single
+difference is consistent with the entire measured gap, and the fix is a compile
+flag rather than an algorithm change — deliberately not applied here, because
+`-march=native` would break the bit-identical-output guarantee that Phase 0
+established and every determinism test depends on.
+
+Two caveats. This is the medium store, not large: three indexes at 2.14M vectors
+need roughly 12 GiB against 7.4 GiB of RAM, and each library copies the vectors
+internally. And these are single fresh builds, not repeated-build medians.
+[Full results](docs/baseline_comparison_results.json).
+
+```bash
+python3 -m pip install --user hnswlib faiss-cpu   # or: pip install -e '.[baselines]'
+USE_TF=0 OPENBLAS_NUM_THREADS=1 PYTHONPATH=src python3 tests/baseline_compare.py \
+  --graph store/hnsw_construction_large/cpp_direct \
+  --oracle store/hnsw_medium/groundtruth.npz --store store/vectors.npy
+```
+
 ## Retrieval and validation
 
 ```bash

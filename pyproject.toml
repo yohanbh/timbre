@@ -13,6 +13,9 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
 plots = ["matplotlib>=3.8"]
+# Reference baselines only. Never imported by the serving path; see Guardrails
+# in TIMBRE_SPEC.md.
+baselines = ["hnswlib>=0.8", "faiss-cpu>=1.8"]
 
 [build-system]
 requires = ["setuptools>=68", "pybind11>=3.0,<4"]

@@ -314,8 +314,16 @@ measurement needs randomized order and repeats**, not one pass per layout.
 Deciding whether to put an error bar on the cold penalty (currently 200-1200x
 at p99, layout-independent) is open.
 
-Remaining to close the initial scope: an hnswlib/FAISS baseline for the
-honest-calibration README section, then recall@100 and multithreaded throughput
+The hnswlib/FAISS baseline is done. We run 1.45-1.97x slower than hnswlib at
+matched parameters on 509,064 candidates while returning the *highest* recall of
+the three at every efSearch setting. The gap is located: 536 ns per distance
+evaluation against a ~21 ns AVX2 floor, because the kernel is compiled with -O3
+and no architecture flag, so it emits baseline SSE2 rather than the AVX2/FMA the
+CPU supports. Not fixed here — `-march=native` would break the bit-identical
+output guarantee Phase 0 established. Baselines are an optional extra
+(`pip install -e '.[baselines]'`) and never enter the serving path.
+
+Remaining to close the initial scope: recall@100 and multithreaded throughput
 to complete the spec's measurement table. Repeating the artist and temporal
 listening probes on the large store is also open, as is the aggregation
 listening tiebreak in LISTENING.md.
