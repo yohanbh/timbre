@@ -323,8 +323,18 @@ CPU supports. Not fixed here — `-march=native` would break the bit-identical
 output guarantee Phase 0 established. Baselines are an optional extra
 (`pip install -e '.[baselines]'`) and never enter the serving path.
 
-Remaining to close the initial scope: recall@100 and multithreaded throughput
-to complete the spec's measurement table. Repeating the artist and temporal
+The measurement table is complete. recall@100 reaches 99.60% at efSearch=512
+(2.823 ms p50); it needs roughly 4x the beam recall@10 does, and about 19x the
+latency for the deeper list. Throughput peaks at 11,969 queries/sec on 4
+threads (3.10x over one) and then *inverts* — 8 threads is slower in absolute
+terms than 4, reproduced in a second run at 6 and 12 threads. Peak arrives at
+half the 8 physical cores. Not lock contention: the C++ search releases the GIL
+over immutable snapshots. Memory-system contention over the 4.5 GB mapping is
+the likely cause but is a hypothesis, not a measured one.
+
+The initial scope is closed apart from Phase 4 (the optional demo) and open
+question 5 (small model plus good index versus big model plus bad index), which
+needs a second embedding model and is effectively a separate project. Repeating the artist and temporal
 listening probes on the large store is also open, as is the aggregation
 listening tiebreak in LISTENING.md.
 

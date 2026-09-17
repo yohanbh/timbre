@@ -298,6 +298,54 @@ USE_TF=0 OPENBLAS_NUM_THREADS=1 PYTHONPATH=src python3 tests/baseline_compare.py
   --oracle store/hnsw_medium/groundtruth.npz --store store/vectors.npy
 ```
 
+### recall@100 and thread scaling
+
+Completing the spec's measurement table on the large graph (2,143,867 segments,
+1,000 held-out queries, directly memory-mapped). recall@100 needs
+`efSearch >= 100` — a beam narrower than k cannot return k good neighbours — so
+the settings used for recall@10 do not apply.
+
+| efSearch | recall@10 | recall@100 | p50 | p95 |
+|---|---|---|---|---|
+| 128 | 99.85% | 95.44% | 3.136 ms | 8.193 ms |
+| 256 | 99.92% | 98.61% | 1.967 ms | 3.092 ms |
+| 512 | 99.95% | **99.60%** | 2.823 ms | 4.410 ms |
+
+recall@100 is the harder target and needs roughly 4x the beam to match what
+recall@10 reaches at efSearch=128. Reaching 99.60%@100 costs 2.823 ms against
+0.145 ms for 99.58%@10 — about 19x the latency for the deeper result list.
+
+**Search parallelizes to half the physical cores, then contends.** Aggregate
+throughput at `k=10, efSearch=64`, best of three runs, on an 8-core/16-thread
+Ryzen 7 5800H:
+
+| Threads | queries/sec | Speedup | Efficiency |
+|---|---|---|---|
+| 1 | 3,863 | 1.00x | 100% |
+| 2 | 7,732 | 2.00x | 100% |
+| 4 | **11,969** | 3.10x | 77% |
+| 8 | 6,928 | 1.79x | 22% |
+
+Scaling is perfect to 2 threads and still useful at 4. Past that it inverts: 8
+threads is *slower in absolute terms* than 4, and a separate confirmation run
+measured 6,941 q/s at 6 threads and 5,717 at 8, so the collapse is reproducible
+rather than noise. The machine has 8 physical cores with 2-way SMT, so peak
+throughput arrives at half the physical core count.
+
+The C++ search releases the GIL and the snapshots are immutable and read-only,
+so this is not lock contention. The likely cause is memory-system contention —
+each query is a pointer chase over a 4.5 GB mapping, and concurrent traversals
+compete for cache and memory bandwidth rather than CPU. That is a hypothesis
+consistent with the shape of the curve, not a measured cause; separating it from
+SMT effects would need per-thread cache-miss counters.
+[Full results](docs/scaling_table_results.json).
+
+```bash
+USE_TF=0 OPENBLAS_NUM_THREADS=1 PYTHONPATH=src python3 tests/scaling_table.py \
+  --graph store/hnsw_construction_large/cpp_direct \
+  --oracle store/large/index_groundtruth.npz --store store/large/vectors.npy
+```
+
 ## Retrieval and validation
 
 ```bash
