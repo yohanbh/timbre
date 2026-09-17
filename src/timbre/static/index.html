@@ -1,0 +1,87 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Timbre</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 46rem;
+         margin: 2rem auto; padding: 0 1rem; }
+  input[type=text] { width: 100%; padding: .5rem; font: inherit; }
+  button { padding: .5rem 1rem; font: inherit; margin-top: .5rem; }
+  .banner { background: #fff4d6; border: 1px solid #e0c77a; padding: .6rem;
+            margin-bottom: 1rem; font-size: .9rem; }
+  .card { border-top: 1px solid #ddd; padding: .7rem 0; }
+  .meta { color: #555; font-size: .9rem; }
+  .score { float: right; color: #777; font-variant-numeric: tabular-nums; }
+  .note { color: #555; font-size: .9rem; margin-top: 2rem;
+          border-top: 1px solid #ddd; padding-top: 1rem; }
+  .err { color: #a00; }
+</style>
+
+<h1>Timbre</h1>
+<p>Audio similarity search over 105,884 Free Music Archive tracks, on a
+hand-written HNSW index.</p>
+
+<div class="banner" id="banner" hidden><!--BANNER--></div>
+
+<form id="f">
+  <input type="text" name="text" id="text"
+         placeholder="sparse melancholy piano" autofocus>
+  <div class="meta" style="margin:.5rem 0">or upload a clip (only the first 30
+    seconds are used):
+    <input type="file" name="clip" id="clip" accept="audio/*">
+  </div>
+  <button type="submit">Search</button>
+</form>
+
+<div id="out"></div>
+
+<div class="note">
+  <p><strong>What just happened.</strong> Your phrase was embedded with CLAP into
+  the same 512-dimensional space as the music. The index holds 2,143,867
+  overlapping 10-second segments — about 20 per track — and a hand-written HNSW
+  graph found the nearest ones, then kept each track's single best-matching
+  passage. The timestamp on each result is where in that track the match was.</p>
+  <p><strong>No audio is hosted here.</strong> The corpus is 99 GB, so results
+  link to a YouTube search for the artist and title. The search may not find the
+  exact recording.</p>
+</div>
+
+<script>
+const banner = document.getElementById("banner");
+if (banner.textContent.trim()) banner.hidden = false;
+
+document.getElementById("f").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const out = document.getElementById("out");
+  out.innerHTML = "<p>Searching…</p>";
+  const body = new FormData();
+  const text = document.getElementById("text").value;
+  const clip = document.getElementById("clip").files[0];
+  if (clip) body.append("clip", clip); else body.append("text", text);
+  let data;
+  try {
+    data = await (await fetch("/search", {method: "POST", body})).json();
+  } catch (err) {
+    out.innerHTML = '<p class="err">Request failed.</p>';
+    return;
+  }
+  if (data.error) {
+    out.innerHTML = '<p class="err">' + data.error + "</p>";
+    return;
+  }
+  out.innerHTML = "<p class='meta'>" + data.query + "</p>" +
+    data.results.map(r =>
+      '<div class="card"><span class="score">' + r.score.toFixed(3) + "</span>" +
+      "<strong>" + r.rank + ". " + esc(r.title) + "</strong><br>" +
+      '<span class="meta">' + esc(r.artist) +
+      (r.genre ? " · " + esc(r.genre) : "") + " · matched " + r.passage +
+      ' · <a href="' + r.youtube + '" target="_blank" rel="noopener">find on YouTube</a>' +
+      "</span></div>").join("");
+});
+
+function esc(s) {
+  const d = document.createElement("div");
+  d.textContent = s == null ? "" : s;
+  return d.innerHTML;
+}
+</script>

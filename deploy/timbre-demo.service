@@ -1,0 +1,26 @@
+[Unit]
+Description=Timbre audio similarity demo
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/timbre
+# BLAS and OpenMP size their pools at import, so pin before python starts.
+Environment=OMP_NUM_THREADS=1
+Environment=MKL_NUM_THREADS=1
+Environment=OPENBLAS_NUM_THREADS=1
+Environment=USE_TF=0
+Environment=PYTHONPATH=/opt/timbre/src
+Environment=HF_HOME=/opt/timbre/.hf
+ExecStart=/opt/timbre/venv/bin/python -m timbre.serve \
+    --graph /opt/timbre/store/hnsw_locality_large \
+    --db /opt/timbre/store/large/timbre.db \
+    --host 127.0.0.1 --port 8030
+Restart=on-failure
+RestartSec=10
+# Model load plus graph and model warm-up takes a while on 2 cores.
+TimeoutStartSec=900
+
+[Install]
+WantedBy=multi-user.target
