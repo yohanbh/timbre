@@ -4,6 +4,20 @@ Audio similarity search over the Free Music Archive, on a hand-written HNSW inde
 See `TIMBRE_SPEC.md` for scope. **The index is the project**; Phase 0 is the pipeline
 that feeds it.
 
+Give it a 10-second clip or a text description and it returns the tracks that
+sound most like it, with the matching passage. Phases 0-4 are implemented and
+measured:
+
+- **2,144,867 CLAP vectors** from 105,884 FMA large tracks, produced by a
+  resumable GPU pipeline whose store is byte-identical after a kill and restart.
+- **Hand-written HNSW** in Python, then C++ behind pybind11: **99.58% recall@10
+  at 0.145 ms** median on 2,143,867 indexed segments, one thread.
+- C++ search is **4.55x** and construction **4.84x** faster than the Python
+  reference on 509,064 segments, at identical recall.
+- Within **1.5-2.0x of hnswlib's latency**, with equal or higher recall at four
+  of five settings; the gap is traced to a missing SIMD compile flag.
+- A FastAPI demo answers text and audio queries from the 2.14M-segment graph.
+
 The embedding model is pinned to `laion/larger_clap_general` at
 `ada0c23a36c4e8582805bb38fec3905903f18b41`. The original music checkpoint
 produced collapsed text embeddings and weak audio retrieval; see
@@ -83,7 +97,7 @@ unchanged at all five tested search settings; reloading both native graphs
 reproduced the efSearch=64 results. These are single fresh builds per backend.
 
 See [implementation, setup and full measurements](PHASE3.md).
-Phase 3 remains in progress. FMA large download, extraction, vectorization and
+FMA large download, extraction, vectorization and
 final verification completed on 2026-09-10. The large store contains 2,144,867
 populated vectors from 105,884 embedded tracks; 162 failed and 528 were too short,
 with zero pending. No re-vectorization is needed for the index benchmarks.
@@ -121,7 +135,25 @@ from page cache with zero major faults.
 
 See [memory and loading measurements](docs/hnsw_memory_large_results.json) and
 [the warm latency curve](docs/hnsw_warm_latency_large_results.json). Locality
-reordering, multithreaded search and library baselines are still ahead.
+reordering, multithreaded search and library baselines are measured below.
+
+## Phase 4 — demo
+
+`src/timbre/serve.py` is a one-page FastAPI app: type a description or upload a
+clip, and it returns five tracks with the matching timestamp and cosine score.
+It serves from the 2,143,867-segment graph through `NativeHNSW.load_directory`
+on CPU; no third-party ANN library is in the serving path. Uploads average the
+embeddings of up to 21 windows from their first 30 seconds.
+
+No audio is hosted: the corpus is 99 GB, and serving a subset would mean
+restricting the index to it. Results link to a YouTube search instead.
+
+```bash
+PYTHONPATH=src python3 -m timbre.serve \
+  --graph store/hnsw_locality_large --db store/large/timbre.db --port 8030
+```
+
+`deploy/timbre-demo.service` is the systemd unit for a VPS deployment.
 
 ## Open questions — measured results
 
@@ -257,7 +289,8 @@ one query per call rather than a batch, scored against the same exact oracle.
 | 128 | 0.521 ms | 0.336 ms | 0.222 ms | 1.55x |
 | 256 | 0.882 ms | 0.597 ms | 0.415 ms | 1.48x |
 
-Recall is not what we are giving up. **Ours is the highest at every setting:**
+Recall is not what we are giving up. **Ours is the highest at four of five
+settings**, and within 0.02 points of FAISS at the fifth:
 
 | efSearch | ours | hnswlib | FAISS |
 |---|---|---|---|
